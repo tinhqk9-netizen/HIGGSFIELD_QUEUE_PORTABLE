@@ -132,7 +132,10 @@ không phải lỗi ứng dụng:
 | V1 Higgsfield CDP | Đang dùng production. Không thay đổi trong các phiên gần đây. |
 | V1 CLI credit mode | Không chạy được trên máy này (thiếu CLI). |
 | V2 Mock E2E | **COMPLETED** — RUNTIME CONFIRMED |
-| V2 Kie.ai (Seedance 2.5) | **IMPLEMENTED — LUỒNG ACTIVE MỚI** — KieSeedanceProvider + KieFileStorageProvider + LocalKolAssetProvider + Live Pricing & Usage Ledger. Chờ user điền `KIE_API_KEY` và đặt `GTF_VIDEO_PROVIDER=kie` rồi restart |
+| V2 Kie.ai (Seedance 2.5) | **ACTIVE PRODUCTION-READY** — Đã cấu hình KIE_API_KEY, hỗ trợ hot-reload .env, Live Pricing & Usage Ledger, đã test thực tế thành công và trừ tiền chính xác từ ví Kie (672 cr còn lại). |
+| V2 Priority Drag & Drop | **COMPLETED** — Kéo thả sắp xếp thứ tự ưu tiên task pending trong hàng chờ, đồng bộ qua `POST /api/byteplus/queue/reorder`. |
+| V2 Full Transparency UI | **COMPLETED** — Hiển thị 100% minh bạch toàn bộ task trong Queue và lịch sử tiêu hao tín dụng (đã gỡ bỏ hoàn toàn cơ chế ẩn/dọn UI). |
+| V2 Usage Accounting & Cleanup | **COMPLETED** — Làm sạch `byteplus_usage.json` còn đúng 6 task đã hoàn thành do người dùng tự test; backup 1.234 bản ghi cũ vào 2 bản sao lưu an toàn. |
 | V2 OpenRouter (Seedance 2.5) | **INACTIVE FALLBACK** — code giữ nguyên, không nằm trong luồng active |
 | V2 BytePlus ModelArk (Seedance 1.5 Pro) | **INACTIVE FALLBACK** — code giữ nguyên, không nằm trong luồng active |
 | V2 BytePlus TOS | **NOT USED khi provider=kie** — không được khởi tạo; chỉ dùng khi quay lại provider byteplus/openrouter |
@@ -146,7 +149,7 @@ không phải lỗi ứng dụng:
 |---|---|---|
 | `queue_db.json` | 468 task V1 (453 completed / 4 failed / 11 pending) | **4,3 MB**, git-tracked, KHÔNG được migrate |
 | `byteplus_queue_db.json` | task V2 | gitignored, ghi nguyên tử |
-| `byteplus_usage.json` | bản ghi usage accounting 13 trường | gitignored, ghi nguyên tử |
+| `byteplus_usage.json` | 6 bản ghi usage tương ứng 1-1 với 6 task hoàn thành | gitignored, ghi nguyên tử. Backup 1.234 bản ghi cũ tại `byteplus_usage.backup.json` và `docs/BACKUPS/2026-09-10/task-usage-cleanup/` |
 | `byteplus_kol_library.json` | thư viện KOL | gitignored |
 | `byteplus_mock_jobs.json` | registry job mock, cần cho resume sau restart | gitignored |
 | `byteplus_outputs/` | `{creator}/{taskName}/{taskId}.mp4` | gitignored |
