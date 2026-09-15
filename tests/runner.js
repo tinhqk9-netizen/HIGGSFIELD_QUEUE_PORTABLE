@@ -7,8 +7,12 @@ import { runByteplusTests } from './byteplus.test.js';
 import { runOpenRouterTests } from './openrouter.test.js';
 import { runKieTests } from './kie.test.js';
 import { runKieModelsTests } from './kie_models.test.js';
+import { runVideoStudioTests } from './video_studio.test.js';
 import { runKiePricingTests } from './kie_pricing.test.js';
 import { runUsageManagerTests } from './usage_manager.test.js';
+import { runGoogleFlowTests } from './google_flow.test.js';
+import { runUiA11yTests } from './ui_a11y.test.js';
+import { runUiConsistencyTests } from './ui_consistency.test.js';
 
 // ANSI styling colors
 const colors = {
@@ -134,8 +138,12 @@ export async function runAllTests() {
         await runOpenRouterTests(reporter);
         await runKieTests(reporter);
         await runKieModelsTests(reporter);
+        await runVideoStudioTests(reporter);
         await runKiePricingTests(reporter);
         await runUsageManagerTests(reporter);
+        await runGoogleFlowTests(reporter);
+        await runUiA11yTests(reporter);
+        await runUiConsistencyTests(reporter);
 
         const totalDuration = performance.now() - startTime;
         const exitCode = reporter.summary(totalDuration);

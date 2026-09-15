@@ -16,17 +16,59 @@
     --color-green: #22c55e;
     --color-warning: #f59e0b;
     --color-danger: #ef4444;
-    
+    --accent-sky: #38bdf8;
+
     --text-primary: #f8fafc;
     --text-secondary: #94a3b8;
     --text-muted: #64748b;
-    
+
+    --overlay-soft: rgba(255,255,255,0.04);
+    --overlay-line: rgba(255,255,255,0.12);
+    --overlay-divider: rgba(255,255,255,0.08);
+
     --radius-sm: 6px;
     --radius-md: 10px;
     --radius-lg: 16px;
     --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.4);
     --shadow-glow-blue: 0 0 20px rgba(59, 130, 246, 0.25);
     --shadow-glow-green: 0 0 20px rgba(16, 185, 129, 0.25);
+
+    /* Phase 2b rollout (index.html / flow-queue.html) — tokens for inline-style colors with no exact existing match */
+    --color-violet: #7567ef;
+    --color-indigo-light: #a5b4fc;
+    --color-blue-light: #60a5fa;
+    --border-slate: #334155;
+    --bg-navy: #0f172a;
+    --bg-slate: #1e293b;
+    --text-tertiary: #cbd5e1;
+    --text-heading-soft: #e2e8f0;
+    --color-amber: #fbbf24;
+    --color-success-light: #4ade80;
+    --color-danger-light: #f87171;
+    --overlay-navy-70: rgba(15, 23, 42, 0.7);
+    --overlay-violet-12: rgba(117, 103, 239, 0.12);
+    --overlay-violet-40: rgba(117, 103, 239, 0.4);
+    --overlay-blue-12: rgba(59, 130, 246, 0.12);
+    --overlay-blue-20: rgba(59, 130, 246, 0.2);
+    --overlay-blue-35: rgba(59, 130, 246, 0.35);
+    --overlay-blue-40: rgba(59, 130, 246, 0.4);
+
+    /* Phase 2c (JS inline-style tokenization) — tokens for colors with no exact existing match */
+    --color-purple-light: #a78bfa;
+    --color-purple-bright: #c084fc;
+    --color-emerald-light: #34d399;
+    --color-red-light: #fca5a5;
+    --overlay-blue-10: rgba(59, 130, 246, 0.1);
+    --overlay-blue-25: rgba(59, 130, 246, 0.25);
+    --overlay-danger-10: rgba(239, 68, 68, 0.1);
+    --overlay-danger-15: rgba(239, 68, 68, 0.15);
+    --overlay-danger-25: rgba(239, 68, 68, 0.25);
+    --overlay-danger-30: rgba(239, 68, 68, 0.3);
+    --overlay-amber-15: rgba(245, 158, 11, 0.15);
+    --overlay-amber-30: rgba(245, 158, 11, 0.3);
+    --overlay-emerald-20: rgba(16, 185, 129, 0.2);
+    --overlay-emerald-40: rgba(16, 185, 129, 0.4);
+    --overlay-black-50: rgba(0, 0, 0, 0.5);
 }
 
 * {
@@ -2221,3 +2263,46 @@ tr.draggable-row.drag-over-bottom td {
     background: rgba(255, 255, 255, 0.02);
 }
 
+
+/* ── Studio switch: AI STUDIO ↔ Video to Video (tool độc lập cùng cổng) ── */
+.studio-switch { display: flex; gap: 8px; align-items: center; }
+.logo-badge { text-decoration: none; cursor: pointer; transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease, background .12s ease; }
+.logo-badge:hover { transform: translateY(-1px); }
+.logo-badge.switch-alt {
+    background: transparent;
+    color: var(--text-secondary, #94a3b8);
+    border: 1px solid var(--border-color, #2a2f3a);
+    box-shadow: none;
+    font-weight: 700;
+}
+.logo-badge.switch-alt:hover { color: #fff; border-color: var(--accent-purple, #7567ef); }
+.logo-badge.is-active { cursor: default; }
+.logo-badge.is-active:hover { transform: none; }
+
+/* ── Phase 2b: rollout — extracted repeated inline-style blocks (index.html) ── */
+.mb-0 { margin-bottom: 0; }
+.mb-8 { margin-bottom: 8px; }
+.usage-th-pad { padding: 8px 10px; }
+.usage-stat-card {
+    flex: 1;
+    min-width: 220px;
+    background: var(--bg-slate);
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid var(--border-slate);
+}
+.usage-stat-sub-note {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+/* Accessibility: respect reduced-motion preference (ui-ux-pro-max audit) */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
