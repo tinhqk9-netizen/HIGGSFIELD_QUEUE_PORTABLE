@@ -180,8 +180,8 @@ export class FlowQueue {
         const imageMedia = media.filter(m => m.kind === 'image');
         const videoMedia = media.filter(m => m.kind === 'video');
 
-        if (imageMedia.length > 3) {
-            throw new Error('Hệ thống chỉ cho phép tối đa 3 ảnh tham chiếu.');
+        if (imageMedia.length > 4) {
+            throw new Error('Hệ thống chỉ cho phép tối đa 4 ảnh tham chiếu.');
         }
         if (videoMedia.length > 1) {
             throw new Error('Google Flow chỉ hỗ trợ tối đa 1 video làm tham chiếu.');

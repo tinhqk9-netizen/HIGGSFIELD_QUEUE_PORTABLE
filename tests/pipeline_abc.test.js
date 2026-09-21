@@ -57,6 +57,7 @@ const G = 'Đợt G — Bộ đếm tiến trình mô tả AI không được v�
 const H = 'Đợt H — Video output phải có ĐỦ mọi phân cảnh (cảnh 1-5s)';
 const I = 'Đợt I — Không nơi nào được tự sinh cửa sổ dài hơn clip';
 const J = 'Đợt J — Sửa được MỌI kịch bản biến thể ở step 4';
+const K = 'Đợt K — Đồng nghiệp clone về chạy được, key không lọt lên git';
 
 const ANALYZER = 'video-analyzer-pipeline/video-analyzer-standalone';
 
@@ -1285,6 +1286,70 @@ export async function runPipelineAbcTests(reporter) {
     await reporter.test(J, 'Tier 3: có chỗ hiện đang sửa biến thể nào', async () => {
         assert.ok(/v2v-timeline-variant/.test(v2vHtml),
             'đầu bảng sửa phải nói rõ đang sửa Video #N');
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ĐỢT K — CLONE VỀ LÀ CHẠY ĐƯỢC, KEY KHÔNG LỌT LÊN GIT
+    //
+    // Trước đó cả thư mục video-analyzer-pipeline/ bị gitignore ⇒ ai clone repo về là
+    // tắc ngay step 2 (analyzer_bridge spawn python không có thật -> AI_ANALYSIS_FAILED),
+    // kéo theo mô tả kho và sinh kịch bản cùng chết.
+    //
+    // Lúc mở ra để push thì phát hiện MỘT API KEY THẬT nhúng cứng làm giá trị mặc định
+    // của nine_router_api_key trong config.py — user đã xoá key trong .env nhưng chỗ này
+    // vẫn còn, nên máy vẫn chạy và không ai nhận ra. Chưa từng vào git (kiểm bằng
+    // git log -S). Test này chặn nó quay lại.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    const ANALYZER_DIR = path.resolve('video-analyzer-pipeline', 'video-analyzer-standalone');
+
+    await reporter.test(K, 'Tier 1: KHÔNG được nhúng key thật trong mã nguồn analyzer', async () => {
+        if (!fs.existsSync(ANALYZER_DIR)) return;   // máy chưa cài analyzer thì bỏ qua
+        const offenders = [];
+        const walk = (dir) => {
+            for (const name of fs.readdirSync(dir)) {
+                if (['.venv', '__pycache__', 'data', 'outputs', '.pytest_cache'].includes(name)) continue;
+                const full = path.join(dir, name);
+                if (fs.statSync(full).isDirectory()) { walk(full); continue; }
+                if (!/\.(py|toml|txt|cjs|json|md)$/i.test(name)) continue;
+                const body = fs.readFileSync(full, 'utf-8');
+                // Chỉ bắt key trông như THẬT (đủ dài), không bắt "sk-..." trong chú thích.
+                if (/sk-[A-Za-z0-9]{8,}[A-Za-z0-9_-]{8,}/.test(body)) offenders.push(full);
+            }
+        };
+        walk(ANALYZER_DIR);
+        assert.deepStrictEqual(offenders, [],
+            'key thật trong mã nguồn sẽ vào git history khi push — phải để trống và đọc từ .env');
+    });
+
+    await reporter.test(K, 'Tier 1: analyzer phải có .env.example với key TRỐNG', async () => {
+        if (!fs.existsSync(ANALYZER_DIR)) return;
+        const f = path.join(ANALYZER_DIR, '.env.example');
+        assert.ok(fs.existsSync(f), 'thiếu .env.example thì người clone về không biết phải khai gì');
+        const body = fs.readFileSync(f, 'utf-8');
+        assert.ok(/^NINE_ROUTER_API_KEY=\s*$/m.test(body),
+            'NINE_ROUTER_API_KEY trong file mẫu phải để TRỐNG');
+        assert.ok(/NINE_ROUTER_BASE_URL/.test(body) && /WHISPER_DEVICE/.test(body),
+            'file mẫu phải nêu đủ biến bắt buộc');
+    });
+
+    await reporter.test(K, 'Tier 2: .gitignore cho mã nguồn vào nhưng chặn key/venv/cache', async () => {
+        const lines = fs.readFileSync(path.resolve('.gitignore'), 'utf-8').split(/\r?\n/).map(l => l.trim());
+        assert.ok(!lines.includes('video-analyzer-pipeline/'),
+            'chặn cả thư mục là đồng nghiệp clone về không chạy được');
+        for (const must of ['video-analyzer-pipeline/**/.env', 'video-analyzer-pipeline/**/.venv/',
+                            'video-analyzer-pipeline/**/data/']) {
+            assert.ok(lines.includes(must), `thiếu luật chặn: ${must}`);
+        }
+        assert.ok(lines.includes('!video-analyzer-pipeline/**/.env.example'),
+            'file mẫu phải đi theo repo');
+    });
+
+    await reporter.test(K, 'Tier 2: .env.example gốc phải nói về 9Router', async () => {
+        const body = fs.readFileSync(path.resolve('.env.example'), 'utf-8');
+        assert.ok(/NINE_ROUTER_API_KEY/.test(body),
+            'người dựng máy mới cần biết khai 9Router ở đâu');
+        assert.ok(/^NINE_ROUTER_API_KEY=\s*$/m.test(body), 'key trong file mẫu phải để trống');
     });
 }
 

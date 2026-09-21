@@ -1,0 +1,103 @@
+You are given a synchronized multimodal timeline of a video.
+
+The timeline contains:
+
+VISUAL:
+What is visible.
+
+AUDIO:
+What is spoken.
+
+IMPORTANT LANGUAGE REQUIREMENT:
+All output text, summaries, narrative structures, purposes, conclusions, and descriptions MUST be written in natural, fluent Vietnamese (Tiếng Việt).
+
+Create a complete analysis of the video.
+
+Determine:
+
+1. Overall purpose (in Vietnamese)
+2. Main subject (in Vietnamese)
+3. Narrative structure (in Vietnamese)
+4. Scene-by-scene progression (in Vietnamese)
+5. Relationship between speech and visuals
+6. Important people
+7. Important objects/products
+8. Claims
+9. Calls to action
+10. Visible text
+11. Key moments
+12. Important transitions
+13. Visual/audio mismatches
+14. Overall conclusion (in Vietnamese)
+
+Use timestamps when referring to important moments.
+
+Do not invent information not contained in the timeline.
+
+=====================================================================
+BẮT BUỘC — CHẤM ĐIỂM QUẢNG CÁO THEO 7 TIÊU CHÍ (thang 1-10)
+=====================================================================
+Ngoài việc mô tả video, bạn PHẢI chấm điểm video này như một chuyên gia
+quảng cáo short-form đang chấm bài của đối thủ. Chấm thẳng tay, không nể nang:
+1 = rất kém, 5 = trung bình, 8 = tốt, 10 = xuất sắc hiếm thấy.
+Đừng chấm mọi tiêu chí cùng một mức — hãy phân hoá rõ điểm mạnh và điểm yếu.
+
+7 tiêu chí (mỗi tiêu chí 1 số nguyên từ 1 đến 10):
+- "hook"      : 3 giây đầu có giữ chân người xem không? Có chặn được cú vuốt tay không?
+- "structure" : mạch vấn đề → giải pháp → bằng chứng → kêu gọi hành động có rõ không?
+- "pacing"    : nhịp cắt cảnh, độ dài mỗi cảnh, có chỗ nào lê thê hay hụt hơi không?
+- "visual"    : chất lượng hình, bố cục khung hình, ánh sáng, độ rõ của sản phẩm.
+- "audio"     : giọng đọc, nhạc nền, tiếng động, mức độ ăn khớp với hình.
+- "message"   : thông điệp và lợi ích chính có rõ ràng, dễ nhớ không?
+- "cta"       : lời kêu gọi hành động có mạnh, đúng lúc, dễ làm theo không?
+
+PHÂN TÍCH HOOK (3 giây đầu):
+- "type"       : chọn ĐÚNG MỘT trong các loại sau (ghi đúng chuỗi, không dịch):
+                 "cau-hoi"    (mở bằng câu hỏi thẳng vào nỗi đau)
+                 "gay-soc"    (hình ảnh/lời nói gây sốc, phản trực giác)
+                 "van-de"     (phơi bày ngay vấn đề người xem đang gặp)
+                 "truoc-sau"  (đối lập trước / sau khi dùng)
+                 "so-sanh"    (so sánh 2 lựa chọn, 2 sản phẩm)
+                 "demo"       (thao tác sản phẩm ngay lập tức)
+                 "loi-chung"  (lời chứng thực, người thật việc thật)
+                 "con-so"     (mở bằng con số, giá, thống kê)
+                 "khac"       (không thuộc nhóm nào ở trên)
+- "first_3s"   : mô tả bằng tiếng Việt CHÍNH XÁC những gì xảy ra trong 3 giây đầu.
+- "score_1_10" : điểm riêng cho sức hút của hook (1-10).
+
+CẤU TRÚC KỊCH BẢN — điền bằng tiếng Việt, để chuỗi rỗng nếu video thiếu phần đó:
+- "problem"  : video nêu vấn đề gì?
+- "solution" : giải pháp được trình bày thế nào?
+- "proof"    : bằng chứng gì được đưa ra (demo, con số, lời chứng, trước/sau)?
+- "cta"      : kêu gọi hành động là gì?
+
+ĐIỂM MẠNH / ĐIỂM YẾU / ĐỀ XUẤT — mỗi mục 2-4 gạch đầu dòng ngắn gọn bằng tiếng Việt,
+nói về CHÍNH video này, không nói chung chung:
+- "strengths"    : cái gì đang làm tốt và đáng học lại.
+- "weaknesses"   : cái gì đang làm dở, chỉ rõ ở đoạn nào (kèm mốc thời gian).
+- "improvements" : nếu làm lại video này thì sửa gì, sửa như thế nào.
+
+CRITICAL JSON FORMAT — DO NOT TRANSLATE THE KEYS:
+Return ONE JSON object (no markdown code fences) using these EXACT English field names (keys).
+Do NOT rename, translate, or localize the keys into Vietnamese (e.g. use "purpose", NOT
+"muc_dich"; use "summary", NOT "tom_tat"):
+- "summary"    (string, value in Vietnamese — a detailed overview)
+- "purpose"    (string, value in Vietnamese)
+- "conclusion" (string, value in Vietnamese)
+- "timeline"   (array of objects: {"start": number, "end": number, "visual": string, "speech": string, "analysis": string})
+- "key_moments"    (array of objects)
+- "visual_summary" (object: {"scenes": [...], "people": [...], "objects": [...], "products": [...], "visible_text": [...]})
+- "audio_summary"  (object: {"language": string, "topics": [...], "claims": [...], "calls_to_action": [...]})
+- "entities"        (array of strings)
+- "calls_to_action" (array of strings)
+- "hook_analysis"  (object: {"type": string, "first_3s": string, "score_1_10": number 1-10})
+- "criteria_scores" (object: {"hook": number, "structure": number, "pacing": number, "visual": number, "audio": number, "message": number, "cta": number} — mỗi giá trị 1-10)
+- "overall_score_1_10" (number 1-10 — điểm tổng, KHÔNG phải trung bình cộng máy móc mà là đánh giá tổng thể)
+- "structure"       (object: {"problem": string, "solution": string, "proof": string, "cta": string})
+- "strengths"       (array of strings, tiếng Việt)
+- "weaknesses"      (array of strings, tiếng Việt)
+- "improvements"    (array of strings, tiếng Việt)
+ONLY the VALUES are written in Vietnamese. The KEYS above stay exactly in English.
+"summary" and "purpose" MUST be non-empty, substantive Vietnamese text describing THIS specific video.
+"criteria_scores", "overall_score_1_10" và "hook_analysis.score_1_10" LÀ BẮT BUỘC — không được bỏ trống,
+không được trả 0 và không được trả cùng một con số cho cả 7 tiêu chí.

@@ -58,3 +58,15 @@ video_studio_projects.json
 
 # Flowq (Google Flow qua Chrome CDP 9334) — output/upload/db cục bộ
 /flow_outputs/
+
+
+# Video Analyzer Pipeline - CHO ma nguon vao git de dong nghiep pull ve dung duoc,
+# chi chan key that, moi truong ao va cache (48MB venv + 66MB anh frame cu).
+video-analyzer-pipeline/**/.venv/
+video-analyzer-pipeline/**/.env
+!video-analyzer-pipeline/**/.env.example
+video-analyzer-pipeline/**/data/
+video-analyzer-pipeline/**/outputs/
+video-analyzer-pipeline/**/__pycache__/
+video-analyzer-pipeline/**/*.pyc
+video-analyzer-pipeline/**/.pytest_cache/
