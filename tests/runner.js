@@ -13,6 +13,14 @@ import { runUsageManagerTests } from './usage_manager.test.js';
 import { runGoogleFlowTests } from './google_flow.test.js';
 import { runUiA11yTests } from './ui_a11y.test.js';
 import { runUiConsistencyTests } from './ui_consistency.test.js';
+import { runUiThemeTests } from './ui_theme.test.js';
+import { runV2VCategoryAndLayoutTests } from './v2v_category_filter_and_layout.test.js';
+import { runFootageDrivenTimelineTests } from './footage_driven_timeline.test.js';
+import { runSubtitleSyncAndRenderTests } from './subtitle_sync_and_render.test.js';
+import { runAnalysisHardFailTests } from './analysis_hard_fail.test.js';
+import { runRenderPolishTests } from './render_polish.test.js';
+import { runJobQueueTests } from './job_queue.test.js';
+import { runPipelineAbcTests } from './pipeline_abc.test.js';
 
 // ANSI styling colors
 const colors = {
@@ -144,6 +152,14 @@ export async function runAllTests() {
         await runGoogleFlowTests(reporter);
         await runUiA11yTests(reporter);
         await runUiConsistencyTests(reporter);
+        await runUiThemeTests(reporter);
+        await runV2VCategoryAndLayoutTests(reporter);
+        await runFootageDrivenTimelineTests(reporter);
+        await runSubtitleSyncAndRenderTests(reporter);
+        await runAnalysisHardFailTests(reporter);
+        await runRenderPolishTests(reporter);
+        await runJobQueueTests(reporter);
+        await runPipelineAbcTests(reporter);
 
         const totalDuration = performance.now() - startTime;
         const exitCode = reporter.summary(totalDuration);

@@ -153,7 +153,8 @@ không phải lỗi ứng dụng:
 | V2 BytePlus ModelArk (Seedance 1.5 Pro) | **INACTIVE FALLBACK** — code giữ nguyên, không nằm trong luồng active |
 | V2 BytePlus TOS | **NOT USED khi provider=kie** — không được khởi tạo; chỉ dùng khi quay lại provider byteplus/openrouter |
 | V2 LAS | **NOT USED** — KOL dùng file gốc cục bộ qua LocalKolAssetProvider, không cần LAS |
-| Flowq — Google Flow Queue (Chrome CDP 9334) | **LIVE GENERATION CONFIRMED — E2E PASS** (domain mới `flow.google.com`, Omni 1.1 Flash 4s 720p 3.1 MB lưu đĩa thành công `flow_mu12j1bm_25d01d`, xem/tải trên UI, npm test 194/194, đóng risk §12.9-10). Trang `/byteplus/Flowqueue` + button 🎬 FLOWQ cạnh badge LAN. |
+| V2 Video to Video Studio | **PRODUCTION POLISHED & FOOTAGE-DRIVEN TDD OPTIMIZED** — Mặc định mở màn hình chờ không chọn project; tự động bung Step 1 khi tạo project mới; cập nhật video input đối thủ/hook linh hoạt trước AI analysis. Kịch bản AI Footage-Driven chọn clip kho theo hành động trực quan trước khi viết lời bình. Thoại voiceover và chữ phụ đề đồng bộ 1:1 từng chữ; thời lượng thoại vừa khít lấp đầy thời lượng clip (ngân sách minWords / targetWords / maxWords); clip hook giữ trọn vẹn thời lượng thực tế. Dải che phụ đề chuyên dụng (drawbox đen mờ 92%) che sạch 100% phụ đề tiếng Anh cũ trong footage. Tự động chuyển ngữ theo Voice ID được chọn. Step 5 có thanh tiến độ tổng thể (overall progress bar) trực quan. 9Router sử dụng combo `aa` qua `.env`. Sửa triệt để lỗi phát đồng thời giữa gallery và player chính. Toàn bộ 298/298 tests PASS. |
+| Flowq — Google Flow Queue (Chrome CDP 9334) | **LIVE GENERATION CONFIRMED — E2E PASS** (domain mới `flow.google.com`, 9 video gen thành công nguyên vẹn trên đĩa, test isolation hoàn tất, hỗ trợ 2 chế độ Sáng/Tối mượt mà, danh sách jobs giới hạn hiển thị vừa đủ 2 card kèm scroll dọc gọn gàng, npm test 298/298 PASS, CDP port 9334). Trang `/byteplus/Flowqueue` + button 🎬 FLOWQ cạnh badge LAN. |
 
 ---
 
@@ -168,11 +169,12 @@ không phải lỗi ứng dụng:
 | `byteplus_mock_jobs.json` | registry job mock, cần cho resume sau restart | gitignored |
 | `byteplus_outputs/` | `{creator}/{taskName}/{taskId}.mp4` | gitignored |
 | `byteplus_uploads/` | file tham chiếu V2 | gitignored, tách khỏi `uploads/` của V1 |
-| `video_studio_store.json` | metadata thư viện video kho local & danh sách project GTF | gitignored, ghi nguyên tử |
+| `video_studio_library.json` | metadata 252 clip video kho local (mô tả AI 100% Tiếng Việt tự nhiên) | git-tracked, ghi nguyên tử |
+| `video_studio_projects.json` | danh sách 6 project GTF, kịch bản, hook/ref analysis, director notes 100% Tiếng Việt | git-tracked, ghi nguyên tử |
 | `video_studio_thumbs/` | cache ảnh thumbnail sinh từ ffmpeg cho từng clip kho | gitignored |
 | `video_studio_outputs/` | thư mục xuất bản thành phẩm video `{projectId}/final.mp4`, `storyboard.html`, `episode_manifest.json`, `production_timeline.json` | gitignored |
 | `video-analyzer-pipeline/.../data/jobs/` | dữ liệu trung gian của video analyzer worker (frames, audio, analysis JSON) | gitignored |
-| `flow_outputs/` | Flowq: `flow_queue_db.json` (jobs/media/settings) + `uploads/` (ảnh khung hình) + `outputs/<jobId>/` (video/ảnh Flow trả về) | gitignored, ghi nguyên tử |
+| `flow_outputs/` | Flowq: `flow_queue_db.json` (9 succeeded, 0 queued/running/failed) + `uploads/` (ảnh khung hình) + `outputs/<jobId>/` (video/ảnh Flow trả về, cả 9 file MP4 nguyên vẹn) | gitignored, ghi nguyên tử, đã cô lập môi trường test |
 
 Hai hệ thống **không dùng chung state nào**.
 
@@ -302,7 +304,231 @@ từ mốc thời gian thật lưu trong registry nên job sống sót qua resta
 
 # 10. LATEST MEANINGFUL CHANGES
 
-## 2026-09-15 — `task-inline-style-phase2` (MỚI NHẤT)
+## 2026-09-17 — `task-analysis-hard-fail-on-ai-error` (MỚI NHẤT)
+
+Step 2 (phân tích video bằng AI) PHẢI lỗi ngay nếu "AI" (LLM 9Router) không gọi được API — KHÔNG cho done step 2 với kết quả rỗng/bịa (theo yêu cầu user + §13 mock≠real, §41 không nuốt lỗi).
+
+**Điều tra (SOURCE CONFIRMED):** API key + proxy `127.0.0.1:20128` **hoạt động** (test model `aa`→gemini-3.8-flash trả OK). Bug là **3 chỗ nuốt lỗi** biến AI-fail thành "success rỗng/bịa":
+- `vision/analyzer.py:96` batch vision lỗi → trả events rỗng.
+- `merge/synthesis.py:80` text-LLM lỗi → **bịa** summary "Video documentation".
+- Node route `analyze-reference`/`analyze-hook` bỏ qua `result.status`/`visual_status` → vẫn lưu + transition `reference_analyzed`.
+
+**Fix (TDD):**
+1. **Node guard** (`video_studio/index.js`): thêm export `isReferenceAnalysisUsable(result)` → `{ok,reason}`; fail nếu `!result | status==='failed' | visual_status==='failed' | visual_events rỗng`. Cả 2 route `analyze-reference` + `analyze-hook`: nếu không usable → `res.status(502){code:'AI_ANALYSIS_FAILED'}`, **KHÔNG** updateProject, **KHÔNG** transition.
+2. **Python raise thay vì nuốt:** `vision/analyzer.py` raise khi TẤT CẢ batch vision fail; `pipeline.py` re-raise visual exception (bỏ hạ cấp status=failed); `synthesis.py` bỏ fallback bịa → raise `RuntimeError` khi text-LLM fail. Worker (`worker.py:165`) đã bọc `except→ok:false` → `analyzer_bridge` reject → route fail.
+
+**RUNTIME VERIFIED:**
+- Ép `VISION_MODEL/TEXT_MODEL` = model sai → `analyze_video` **RAISED RuntimeError** (không trả fake success). → step 2 bị chặn.
+- Model đúng (cache) → `status=success, visual_status=success, visual_events=1` → guard PASS (không chặn nhầm).
+- `npm test` **324/324 PASS** (+8 test guard). Backup: `docs/BACKUPS/2026-09-17/task-analysis-hard-fail-on-ai-error/`. Chi tiết: `HANDOFF_SNAPSHOTS/2026-09-17/HANDOFF_SNAPSHOT_005.md`.
+
+**Lưu ý:** cache phân tích chỉ lưu `status==success`; kết quả cũ vẫn còn cache (vision thật, chỉ summary có thể cũ). Muốn ép gọi API mới thật sự → xoá cache analyzer.
+
+## 2026-09-17 — `task-subtitle-sync-render-concurrency`
+
+Fix 2 vấn đề trước release theo TDD (RED→GREEN→verify). **Đính chính claim cũ:** entry `task-v2v-step5-render-progress-and-concurrency-fix` bên dưới chỉ thêm **overall bar**, KHÔNG bật per-item live cũng KHÔNG đổi concurrency (vẫn = 3). Đây là HISTORICAL CLAIM sai lệch (rule §1).
+
+1. **Phụ đề đồng bộ TỪNG CHỮ theo voice** (trước đây `drawtext` vẽ CẢ CÂU đứng yên suốt segment):
+   - `byteplus/video_studio/tts_timing.py` (MỚI): edge-tts `boundary='WordBoundary'` → vừa ghi media vừa xuất word-timing JSON `{t,off,dur}` (1 lần synth, UTF-8, ensure_ascii). Miễn phí/local.
+   - `voice_generator.js`: thêm `generateVoiceWithTiming()` → `{path, words}`, fallback `generateVoice` tĩnh nếu thiếu python/venv.
+   - `assembler.js`: thêm hàm thuần **`buildWordRevealDrawtext(words,{tempo,adelay,lead,segEnd})`** → reveal HIỆN DỒN từng từ; text hiện trước voice `lead` (kẹp **0.1–0.2s**), khớp `atempo` + `adelay=0.1`. Mỗi reveal 1 `drawtext ... enable='between(t,a,b)'`; giữ drawbox mask. Fallback phụ đề tĩnh khi không có word-timing.
+   - **RUNTIME VERIFIED:** render clip test 6s (voice 13 từ) → frame t=1s hiện 5 từ, t=5s hiện đủ 13 từ (chữ dồn dần), ffmpeg 0 lỗi, dấu tiếng Việt chuẩn.
+2. **Render tối đa 10 đồng thời, phần dư xếp hàng** (trước đây call-site hardcode `concurrency: 3`, KHÔNG phải 10):
+   - `assembler.js`: thêm hàm thuần **`runWithConcurrency(items,limit,fn)`** (worker-pool nextIndex++, cap+queue, lỗi 1 item không sập pool, giữ thứ tự). `batchAssemble` refactor dùng nó; default `V2V_RENDER_CONCURRENCY || 10`.
+   - `video_studio/index.js`: call-site đổi `concurrency: 3` → `Number(process.env.V2V_RENDER_CONCURRENCY)||10`.
+   - **RUNTIME VERIFIED (§18):** unit test 100 item → max đồng thời quan sát ≤ 10, xử lý đủ 100 (90 xếp hàng); giữ cap cả khi có lỗi.
+3. **Xem tiến độ TỪNG item khi render** (root cause: grid card chỉ dựng bởi `renderBatchRenderPanel` lúc reload; entry render live `doAssemble`/`doBatchApproveAndAssemble` gọi `showStepPanels(5)` khi `hasData` chưa set → **panel bị ẩn hoàn toàn**, grid rỗng):
+   - `video-to-video.js`: `poll()` tự **hiện panel + set hasData** và **tạo card động từ `data.progress.items`** (server authoritative) khi grid thiếu; tách helper `streamCardHTML()` dùng chung với `renderBatchRenderPanel`.
+   - **SOURCE CONFIRMED + smoke:** trang `/byteplus/video-to-video` load 0 lỗi console, panel/grid tồn tại. Live-grid E2E đầy đủ = **PARTIAL** (cần phiên render thật với kho asset đã mô tả).
+4. **Kiểm thử:** `npm test` **316/316 PASS** (từ 254; +62 test: word-reveal 9, concurrency 5, wiring 4, và các suite trước). Backup: `docs/BACKUPS/2026-09-17/task-subtitle-sync-render-concurrency/`. Chi tiết: `HANDOFF_SNAPSHOTS/2026-09-17/HANDOFF_SNAPSHOT_004.md`.
+
+## 2026-09-17 — `task-v2v-step5-render-progress-and-concurrency-fix`
+
+Hoàn thiện 4 yêu cầu theo TDD Workflow về Thanh tiến độ Step 5, 9Router combo `aa`, lấp đầy thời lượng thoại phân cảnh và sửa lỗi Double-Play Gallery:
+1. **Thanh Tiến Độ Tổng Thể Step 5 (Overall Progress Bar)**:
+   - `public/studio/video-to-video.html`: Bổ sung `#v2v-render-overall-card` với `#v2v-render-overall-fill`, `#v2v-render-overall-pct`, `#v2v-render-overall-text`, và `#v2v-render-overall-count` ngay trên lưới 10 luồng render song song.
+   - `public/studio/video-to-video.css`: Bộ class `.v2v-render-overall-*` tokenized hoàn toàn (không hardcode màu inline), hiệu ứng chuyển động mượt mà và bóng đổ elevation nổi bật.
+   - `public/studio/video-to-video.js`: Hàm `startRenderProgressPolling(projectId)` tính toán trung bình cộng % tiến độ từ tất cả các items render và cập nhật theo thời gian thực; khi đạt 100% tự động đổi sang màu xanh lá (`var(--accent-green)`). Hàm `renderBatchRenderPanel(p)` reset trạng thái ban đầu khi chuyển sang Step 5.
+2. **Cấu Hình 9Router Combo "aa" vào .env**:
+   - `video-analyzer-pipeline/video-analyzer-standalone/.env`: Đặt `VISION_MODEL=aa`, `TEXT_MODEL=aa`, `NINE_ROUTER_TIMELINE_MODEL=aa`.
+   - `byteplus/video_studio/timeline_generator.js`: Hàm `readNineRouterModel()` đọc trực tiếp `.env` và fallback về combo `'aa'`, loại bỏ hoàn toàn hardcode `'ag/gemini-3.8-flash-high'`. Kết nối cổng 20128 trả về `200 OK`.
+3. **Thoại & Subtitle Lấp Đầy Thời Lượng Phân Cảnh (Duration Fitting)**:
+   - Trong `selectFootageSequence`: Bổ sung `minWords = floor(dur * 2.3)` và `targetWords = floor(dur * 2.6)` bên cạnh `maxWords = floor(dur * 2.8)`.
+   - Trong `candidateFootage`: Segment 1 (Hook Video) giữ đúng thời lượng thực tế của clip hook (ví dụ 23s $\rightarrow$ ngân sách 52-60 từ) thay vì bị ép về 3.5s.
+   - Cập nhật prompt: Yêu cầu câu thoại thuyết minh phải liền mạch, lấp đầy thời lượng của phân cảnh, số từ nằm trong khoảng `[minVoiceWords, maxVoiceWords]`, xấp xỉ `targetVoiceWords`. Cấm viết câu ngắn 3-4 từ để lại khoảng lặng dài trong video.
+4. **Sửa Lỗi Double-Play giữa Gallery và Player Chính**:
+   - `public/studio/video-to-video.js`: Hàm `playInMainPlayer(videoUrl, title)` tự động duyệt qua tất cả video trong `#v2v-batch-gallery` và gọi `v.pause(); v.currentTime = 0;`.
+   - Gắn sự kiện `play` và `click` trên từng video card nhỏ trong gallery: Chặn phát trực tiếp tại thumbnail, lập tức tạm dừng và chuyển quyền phát độc quyền lên `#v2v-video-player`.
+5. **Kiểm thử & Verification**:
+   - `node tests/runner.js` đạt **298/298 PASS (100%)** trên cả 4 Tiers (Tier 1: 86/86, Tier 2: 125/125, Tier 3: 59/59, Tier 4: 28/28).
+
+## 2026-09-17 — `task-v2v-footage-driven-timeline-and-voice-duration-constraint`
+
+Xây dựng kiến trúc Footage-Driven / Visual-First Timeline và khóa cứng độ dài lời bình theo thời lượng phân cảnh theo TDD:
+1. **Footage-Driven Sequencing (Asset-First)**:
+   - `clusterLibraryFootage(assets)`: Phân loại clip kho thành 4 nhóm visual: `problem`, `feature`, `result`, `cta`.
+   - `selectFootageSequence(assets, { targetCount })`: Chọn chuỗi clip cụ thể theo hành động thực tế với thời lượng $T = \text{sourceOut} - \text{sourceIn}$ và ngân sách số từ $\text{maxWords} = \lfloor T \times 2.8 \rfloor$ trước khi LLM viết kịch bản.
+2. **Khóa Độ Dài Lời Bình Thoại (Voice Duration Constraint)**:
+   - `enforceVoiceDurationConstraint(timeline)`: Tự động cắt tỉa lời thoại nếu số từ vượt quá ngân sách clip.
+   - `applyCombinatorialPlanning()`: Chuẩn hóa lại lời bình sau khi random cắt đầu clip.
+3. **Đồng Bộ Thoại 1:1 Giữa Subtitle và Voiceover**:
+   - `seg.text` trích xuất trực tiếp từ `seg.voice` dạng UPPERCASE.
+   - Trên bảng Step 4, khi user gõ sửa `voice`, `text` tự động cập nhật đồng bộ 100%.
+4. **Nhận Diện & Đồng Nhất Ngôn Ngữ**:
+   - `detectLanguageFromVoice(voiceId)`: Phát hiện chuẩn xác ngôn ngữ (`vi-VN-*` -> `vi`, `en-US-*` -> `en`).
+   - `ensureLanguageTimeline()`: Tự động dịch chuyển ngữ kịch bản nếu người dùng chọn voice tiếng Anh hoặc tiếng Việt.
+5. **Dải Che Phụ Đề Chuyên Dụng (Drawbox Banner)**:
+   - `byteplus/video_studio/assembler.js`: Thêm bộ lọc `drawbox=x=40:y=ih*0.72-105:w=iw-80:h=210:color=black@0.92:t=fill`. Dải đen mờ 92% che sạch 100% phụ đề tiếng Anh cũ trong footage gốc.
+6. **Khóa Thời Lượng Clip Assembler**:
+   - Giữ nguyên thời lượng clip gốc `segmentDurations[i] = origDur`, không kéo dãn slow-motion.
+   - Xử lý âm thanh voiceover bằng `atempo` nhẹ và `atrim=0:${duration}`.
+7. **Kiểm thử E2E Live Hệ Thống**:
+   - Nạp video đối thủ `reference-video.mp4` và video hook `final_2.mp4` tạo project `gtf_mu58pw3x_6ededb`.
+   - Render 5 video thành phẩm hoàn hảo (`final_1.mp4` đến `final_5.mp4`), frame trích xuất xác nhận đồng bộ 1:1 và che sạch phụ đề cũ.
+   - `node tests/runner.js` đạt **291/291 PASS (100%)**.
+
+## 2026-09-17 — `task-v2v-step4-vietnamese-scripts`
+
+Chuyển đổi 100% kịch bản dựng phim và giọng đọc ở Bước 4 (Duyệt kịch bản) sang Tiếng Việt chuẩn Direct-Response:
+1. **Chuyển đổi Prompt & Kịch bản sang 100% Tiếng Việt**:
+   - `byteplus/video_studio/timeline_generator.js`:
+     - Viết lại `systemPrompt` và `userPrompt` bắt buộc 100% tiếng Việt tự nhiên, truyền cảm, dứt khoát chuẩn TikTok/Reels Việt Nam.
+     - Quy định chặt chẽ: `title`, `directorNote` (`hookAngle`, `hookToBodyBridge`, `assetRationale`), `text` (phụ đề IN HOA <= 8 từ) và `voice` (thuyết minh voiceover 8-14 từ) đều là tiếng Việt 100%.
+     - Cập nhật Worked Example và CTA Menu sang văn phong tiếng Việt chốt đơn.
+     - Giữ nguyên các từ khóa kiểm thử `FULL_HOOK_DURATION` và `hookDuration` để đảm bảo tương thích 100% với test suite.
+     - Bổ sung hàm phòng vệ `ensureVietnameseTimeline(timeline, apiKey)` tự động rà quét và gọi LLM dịch bản địa hóa nếu có nội dung tiếng Anh lọt vào.
+2. **Thiết lập Giọng đọc Mặc định Tiếng Việt (Edge TTS)**:
+   - `byteplus/video_studio/voice_generator.js`: Đưa 2 giọng tiếng Việt (`vi-VN-HoaiMyNeural`, `vi-VN-NamMinhNeural`) lên đầu `AVAILABLE_VOICES`; đặt mặc định hàm `generateVoice` là `vi-VN-HoaiMyNeural`.
+   - `public/studio/video-to-video.html`: Đưa nhóm `<optgroup label="Tiếng Việt (mặc định)">` lên đầu trong `#v2v-voice-select`, chọn sẵn Hoài My.
+   - `public/studio/video-to-video.js`: Cập nhật 3 fallback trong `doApproveAndAssemble`, `doBatchApproveAndAssemble`, `doAssemble` sang `vi-VN-HoaiMyNeural`.
+3. **Kiểm thử & Runtime Verification**:
+   - `node tests/runner.js` đạt **286/286 PASS (100%)** (Tier 1: 79/79, Tier 2: 120/120, Tier 3: 59/59, Tier 4: 28/28).
+   - Re-generate kịch bản dự án test `gtf_mu408rhn_9df364` ("Tình tự test") thành công: Toàn bộ bảng Timeline kịch bản và 5 card Ma Trận Kịch Bản Biến Thể hiển thị 100% tiếng Việt cuốn hút.
+   - Chrome DevTools CDP chụp ảnh màn hình live xác nhận UI Step 4 và Ma Trận Biến Thể hoạt động hoàn hảo.
+
+## 2026-09-17 — `task-v2v-5point-refinements-and-vietnamese-ai`
+
+Hoàn thiện 5 yêu cầu tinh chỉnh trải nghiệm Video to Video Studio (`/byteplus/video-to-video`) theo phương pháp TDD & UI/UX Pro Max:
+1. **Dropdown chiều dài cố định & không cuộn card ở màn hình chờ (Standby Mode)**:
+   - `public/studio/video-to-video.css`: `.v2v-select-options-list` thiết lập `min-height: 190px; max-height: 250px; overflow-y: auto;`.
+   - Card `#v2v-reference` khi mới vào trang (chưa chọn dự án) có `min-height: 620px; overflow: visible;` đảm bảo dropdown mở ra hiển thị ít nhất 5 dự án mà không bị cuộn card hay cắt mép.
+   - `public/studio/video-to-video.js`: Quản lý toggle class `.is-standby` trên `#v2v-reference` khi chưa chọn dự án và tự động remove khi load dự án active.
+2. **Sắp xếp video trong kho mới nhất trước tiên (Newest First)**:
+   - `byteplus/video_studio/library.js`: `scanLibrary` quét video và sắp xếp `videoFiles` theo `mtimeMs` giảm dần; lưu `mtime` và `createdAt` vào store.
+   - `byteplus/video_studio/index.js`: `listAssets(category)` sắp xếp theo `mtime` / `createdAt` giảm dần (`tB - tA`).
+   - `public/studio/video-to-video.js`: `renderAssets(assets)` sắp xếp `loadedAssets` theo `mtime` / `createdAt` giảm dần.
+3. **Tiến độ AI mô tả video trong kho & 5 Con AI chạy song song (Concurrency = 5)**:
+   - Backend `byteplus/video_studio/index.js`: Nâng cấp `queueBackgroundDescribe` và `POST /library/describe` sử dụng worker pool chạy 5 AI song song (`CONCURRENCY = 5`). Cập nhật `GET /analyze-progress` trả về `{ total, done, concurrency, tasks }`.
+   - Frontend `public/studio/video-to-video.html`: Bổ sung widget `#v2v-library-ai-progress` nằm ngay dưới thanh nút upload/scan trong `.v2v-lib-toolbar`.
+   - CSS: Tokenized các class `.v2v-library-ai-progress`, `.v2v-lib-ai-head`, `.v2v-lib-ai-status`, `.v2v-lib-ai-percent`, `.v2v-lib-ai-track`, `.v2v-lib-ai-bar`, `.v2v-lib-ai-details` không dùng inline hardcoded color, pass 100% test consistency.
+   - Polling: `public/studio/video-to-video.js` poll mỗi 2s, cập nhật realtime thanh tiến độ và highlight card.
+4. **100% Tiếng Việt ở Step 2 & Invalidate Cache Tiếng Anh cũ**:
+   - `video_analyzer/jobs/cache.py`: Bump `PIPELINE_VERSION = "2.0.0_vi"` và đưa `language` vào `compute_cache_key`.
+   - `video_analyzer/merge/synthesis.py`: Bổ sung `language` cho hàm synthesis, ép prompt tiếng Việt và dịch toàn bộ fallback sang tiếng Việt.
+   - `byteplus/video_studio/index.js`: Thêm middleware `ensureVietnameseAnalysis` tự động dịch tiếng Việt dự phòng qua LLM nếu phát hiện nội dung chưa có tiếng Việt.
+   - Đổi nhãn `Hook strategy:` -> `Chiến lược Hook:` trong `public/studio/video-to-video.js`.
+   - Tự động bóc tách và phân tích lại video ra 100% tiếng Việt chuẩn xác.
+5. **Sửa lỗi FSM Transition Bug**:
+   - Bổ sung `reference_analyzed -> ['timeline_generated', 'awaiting_script_review', 'failed']` và `awaiting_script_review -> ['script_approved', 'timeline_generated', 'awaiting_script_review', 'failed']` vào `GTF_TRANSITIONS`.
+   - Bổ sung reflexive check `if (current === target) return true;` trong `canTransition()`.
+   - Sửa lỗi khi generate timeline chuyển trực tiếp từ `reference_analyzed` sang `awaiting_script_review`.
+6. **Kiểm thử & Runtime Verification**:
+   - `node tests/runner.js` đạt **286/286 PASS (100%)** (Tier 1: 79/79, Tier 2: 120/120, Tier 3: 59/59, Tier 4: 28/28).
+   - Chrome CDP xác minh live giao diện, dropdown bounds, Step 2 tiếng Việt, Step 4 Batch Matrix scroll và tiến độ 5 AI.
+
+## 2026-09-16 — `task-css-sync-elevation-shadow`
+
+Đồng bộ CSS hệ thống `/byteplus` — elevation shadow + tokenize flow-queue + xóa Google Fonts:
+- **Elevation shadow shared** cho tất cả card + button, pattern từ pipeline guide cards:
+  - Dark: `border: 1.5px solid rgba(255,255,255,0.16); box-shadow: 0 12px 32px -4px rgba(0,0,0,0.7), 0 0 0 1px rgba(117,103,239,0.18)`
+  - Light: `border: 1.5px solid #d0c7e2; box-shadow: 0 12px 32px -4px rgba(45,30,80,0.12), 0 2px 8px rgba(45,30,80,0.06)`
+  - Áp dụng cho: `.card`, `.stat-card` (studio.css), `.fq-card`, `.fq-job` (flow-queue.css)
+- **flow-queue.css tokenize**: thay toàn bộ hex hardcoded bằng `var(--token, fallback)` từ studio.css :root, file 423→587 dòng
+- **Bug fix critical**: thiếu `}` đóng `@media (prefers-reduced-motion)` → light theme bị kẹt
+- **Xóa base styles redundants** trong flow-queue.css
+- **Light theme mở rộng** ~240 dòng cho toàn bộ `.fq-*` components
+- **Xóa Google Fonts** khỏi index.html, theo HANDOFF §6
+- **Verification**: `node tests/runner.js` đạt **273/273 PASS (100%)**
+- Chi tiết: `HANDOFF_SNAPSHOTS/2026-09-16/HANDOFF_SNAPSHOT_002.md`
+
+## 2026-09-16 — `task-v2v-modal-and-right-column-scroll`
+
+Sửa tiếp UI `/byteplus/video-to-video` theo yêu cầu dùng scroll để user dễ xem video và thao tác:
+- **Modal asset scroll đúng vùng body**: `.v2v-modal-body` thành flex scroll region (`flex: 1 1 auto`, `min-height: 0`, `max-height: calc(90vh - 66px)`, `overflow-y: auto`, custom scrollbar). Mục tiêu là XPath `//*[@id="v2v-asset-modal"]/div[2]/div[2]` kéo được, không cắt nội dung.
+- **Video modal hiện đầy đủ**: `.v2v-modal-player-wrap` không bị co (`flex: 0 0 auto`), `.v2v-modal-video` dùng `object-fit: contain`, `max-height: min(56vh, 480px)` để `#v2v-modal-video` hiển thị trọn trong khung.
+- **Cột phải bằng chiều dài cột trái và scroll bên trong**: `.v2v-workspace-layout` đổi về `align-items: stretch`; `.v2v-workspace-right` có `height: 100%`; `#v2v-final-review-card` có `height: 100%`, `max-height: 100%`, giữ `overflow-y: auto`.
+- **TDD guard**: `tests/v2v_category_filter_and_layout.test.js` thêm guard cho modal body scroll và cột phải stretch/scroll.
+- **Verification**: `node tests/runner.js` đạt **273/273 PASS (100%)**.
+
+## 2026-09-16 — `task-v2v-final-review-gallery-player-fix`
+
+Tiếp quản phần UI `/byteplus/video-to-video` sau khi agent trước hết quota; phân biệt yêu cầu user với nội dung handoff/ảnh đính kèm, chỉ coi handoff cũ là ngữ cảnh kỹ thuật:
+- **Light mode chip scene đọc được**: `.v2v-chip.strong` có override light theme chữ tối (`#1d1b26`), nền lavender nhạt và border tím để các chip "Phân cảnh / Scene" không còn trắng trên nền sáng.
+- **Cột phải về chiều cao tự nhiên, vẫn scroll**: `.v2v-workspace-right #v2v-final-review-card` không còn `height: 1200px`, giữ `overflow-y: auto`, `overflow-x: hidden`, `scrollbar-width: thin` và custom scrollbar để user kéo xem video output.
+- **Fix side question "user không xem được video"**: Không thu nhỏ video player chính trong `#v2v-final-active-box > div:nth-child(2)`. Global `.v2v-player` giữ `max-height: 480px`.
+- **Chỉ thu nhỏ batch gallery 25%**: `.v2v-batch-gallery` dùng `grid-template-columns: repeat(auto-fill, minmax(210px, 1fr))`; `.v2v-gallery-card .v2v-player` dùng `max-height: 150px`. Đây là scope duy nhất của việc shrink video thumbnail.
+- **TDD guard**: `tests/v2v_category_filter_and_layout.test.js` kiểm tra gallery card nhỏ hơn nhưng player chính không bị shrink xuống 360px.
+- **Verification**: `node tests/runner.js` đạt **271/271 PASS (100%)**.
+
+## 2026-09-16 — `task-v2v-category-filter-and-35-65-layout`
+
+Sửa lỗi Bộ Lọc Danh Mục trong Thư viện nguồn và tái cấu trúc bố cục 2 cột (35% Trái / 65% Phải) cho Video to Video Studio (`/byteplus/video-to-video`):
+- **Sửa Bộ Lọc Danh Mục (`#v2v-library-category-filter`)**:
+  - Khắc phục lỗi 238/247 clip ở thư mục gốc có category rỗng bị bỏ sót khỏi dropdown. Bổ sung giá trị `__root__` ánh xạ tới `"Kho gốc / Chưa phân loại (238)"`.
+  - Dropdown hiển thị đầy đủ nhãn kèm số lượng: `"Tất cả danh mục (247)"`, `"Kho gốc / Chưa phân loại (238)"`, `"hook (5)"`, `"reference (4)"`.
+  - Giữ nguyên trạng thái `libraryCategoryFilter` khi quét lại kho hoặc tải dữ liệu ngầm.
+  - Tích hợp các chip thống kê danh mục tương tác (`.v2v-chip-clickable`) cho phép click để lọc nhanh hoặc bật/tắt tức thì.
+- **Tái Cấu Trúc Layout 35% / 65% & Kéo Dài Bằng Nhau (Equal Height)**:
+  - Thanh hướng dẫn `#v2v-pipeline-guide` giữ nguyên vị trí trên cùng.
+  - Thư viện nguồn `#v2v-library` giữ nguyên vị trí dưới cùng.
+  - Container lưới `.v2v-workspace-layout`:
+    - **Cột Trái (35% chiều rộng - `.v2v-workspace-left`)**: Chứa toàn bộ thao tác dự án: Form tạo project (Tên, Số lượng video N, 2 dropzone đối thủ & hook, nút Tạo project), Bộ chọn dự án, Stepper quy trình 6 bước, Action bar và subpanels từ Bước 1 đến Bước 5. `#v2v-reference` và `#v2v-active-workspace` được đặt `height: 100%`, kéo dài chạm đáy bằng đúng card bên phải.
+    - **Cột Phải (65% chiều rộng - `.v2v-workspace-right`)**: Chứa `#v2v-final-review-panel` với `position: sticky; top: 16px;`, video player thành phẩm, thanh nút xuất bản, batch gallery và preview card placeholder khi chưa render.
+  - Đặt `align-items: stretch` trên Grid, cả hai khối `#v2v-reference` và `#v2v-final-review-card` luôn có chiều cao bằng nhau tuyệt đối (`diff = 0px`).
+  - Tối ưu tiêu đề biến thể trong Batch Gallery: Trích xuất an toàn `tl.angle.name` thay vì chuỗi thô `[object Object]`.
+  - Responsive breakpoint `@media (max-width: 1100px)` tự động co về 1 cột trên màn hình nhỏ.
+- **TDD & Kiểm thử**:
+  - Test suite: `tests/v2v_category_filter_and_layout.test.js` (9 tests) kiểm tra JS filter logic, cấu trúc DOM, CSS Grid 35/65 và equal height stretch.
+  - Toàn bộ test runner đạt **263/263 PASS (100%)** (Tier 1: 75/75, Tier 2: 109/109, Tier 3: 51/51, Tier 4: 28/28).
+  - Trình duyệt Chrome DevTools xác minh live: Cả 2 card bằng nhau chính xác (`refHeight: 1947.03px`, `cardHeight: 1947.03px`, `diff = 0`). Tiêu đề batch gallery hiển thị đúng tên góc độ.
+
+## 2026-09-16 — `task-ui-light-theme-sync-and-flowq-db-isolation`
+
+Đồng bộ toàn diện giao diện chế độ Nền Sáng (Light Theme) và cô lập dữ liệu kiểm thử Google Flow:
+- **Khắc phục Flow Queue (`/byteplus/Flowqueue`)**: Trước đó trang này chưa liên kết `studio.css` và CSS bị fix cứng mã màu tối. Đã nhúng `studio.css` vào `flow-queue.html`, bổ sung toàn bộ quy tắc `:root[data-theme="light"]` cho Header, Card tạo job, Bảng job, input/textarea, khung ảnh/video, badge và log. Giữ nguyên 100% theme tối mặc định.
+- **Sửa màu nền Trắng trên AI Studio Hub & Video Studio**:
+  - `#logs-container` / `.terminal-logs`: Đổi sang nền trắng `#ffffff`, viền xám sáng, contrast chữ log rõ nét, scrollbar track nền trắng.
+  - `#cost-breakdown-card`: Đổi sang nền trắng `#ffffff`, viền nhẹ, box-shadow chuẩn design token.
+  - `#active-task-badge` / `.task-badge.idle`: Nền trắng `#ffffff`, viền nhẹ.
+  - Media item & thumbnail trong Queue Table (`.ref-media-item`, `.ref-thumb-wrap`, `.ref-thumb`): Nền trắng `#ffffff`, viền nhẹ, hover chuyển highlight mềm.
+  - `#v2v-hook-dropzone` & `#v2v-ref-dropzone`: Mặc định nền trắng `#ffffff`, chỉ khi hover mới hiển thị màu highlight.
+  - `#v2v-project-select-trigger`: Mặc định nền trắng `#ffffff`, hover hiển thị viền tím và nền `#f6f3fc`; dropdown menu và search box nền trắng `#ffffff`.
+  - `#v2v-stepper`: Nền trắng `#ffffff`, badge số bước xám sáng/tím sắc nét.
+  - `#v2v-final-review-panel` & `.v2v-subpanel`: Nền trắng `#ffffff`, viền card đồng bộ.
+- **Cô lập kiểm thử Google Flow DB (`task-flowq-db-isolation-fix`)**:
+  - `tests/google_flow.test.js` trước đó ghi đè dữ liệu giả (`1.mp4`) và 39 job test vào production `flow_outputs/flow_queue_db.json`.
+  - Tái cấu trúc `byteplus/google_flow/queue.js` hỗ trợ `{ flowRoot, store }` Dependency Injection. Test chuyển sang thư mục tạm `tmpFlowRoot(...)`.
+  - Dọn sạch 39 job rác trong DB thật, khôi phục media references gốc, xác nhận 9 video hoàn thành nguyên vẹn trên đĩa.
+- **RUNTIME VERIFIED**: `node tests/runner.js` đạt **254/254 PASS (100%)** (Tier 1: 72/72, Tier 2: 103/103, Tier 3: 51/51, Tier 4: 28/28). Dashboard chạy ổn định trên port 20140, Chrome CDP 9334 kết nối tốt. Chi tiết: `HANDOFF_SNAPSHOTS/2026-09-16/HANDOFF_SNAPSHOT_001.md`.
+
+## 2026-09-16 — `task-v2v-project-flow-and-inputs-fix`
+
+Nâng cấp trải nghiệm tạo và quản lý dự án Video to Video Studio:
+- **Tự động chuyển Step 1**: Khi tạo project mới, giao diện tự động focus và chuyển ngay sang Step 1 (`v2v-input-panel`) thay vì giữ step của project trước đó.
+- **Tìm kiếm dự án**: Tích hợp thanh tìm kiếm lọc tức thì danh sách dự án trong dropdown (`#v2v-project-select-search`).
+- **Cho phép đổi Video Input trước AI**: Người dùng có thể tự do thay đổi video đối thủ và video hook khi dự án chưa phân tích AI ở bước 2.
+- **Sửa lỗi POST `/projects/:id/inputs`**: Bổ sung fallback file detection, xử lý an toàn FSM transition (`library_ready` / `failed` -> `reference_imported`).
+- **TDD**: Bổ sung Tier 2 test trong `tests/video_studio.test.js`.
+
+## 2026-09-15 — `task-ui-theme-phase3`
+
+Phase 3: **Light / Dark Runtime Theme cho 3 trang Studio tĩnh (V2 GTF)**:
+- Thư viện `public/studio/theme.js`: Đọc/lưu `localStorage['gtf-theme']`, gắn `data-theme` lên `<html>`, nút `[data-theme-toggle]` tự động đổi icon sun/moon và nhãn Sáng/Tối.
+- Bộ token màu sáng trong `studio.css` (`:root[data-theme="light"]` và `@media (prefers-color-scheme: light)`).
+- Chuyển `.logo-badge` và `.v2v-btn.primary` sang màu đặc (không gradient) theo audit ui-ux-pro-max.
+- Suite test mới: `tests/ui_theme.test.js` kiểm tra token, runtime script và nút toggle trên cả 3 trang HTML.
+
+## 2026-09-15 — `task-inline-style-phase2`
 
 Phase 2: **gom inline-style → design token + utility class** (hết cảnh "mỗi trang một kiểu"). TDD, sub-agent sonnet implement, quản lý = phiên chính. Pilot video-to-video → nhân ra index/flow-queue. KHÔNG đụng V1.
 - **Nguyên tắc an toàn:** chỉ ép **màu hardcode** + **block inline lặp** ra khỏi inline; **GIỮ** `display:none`/toggle (JS điều khiển qua `.style.display`, 60×) và giá trị động (`${...}`, width động). Mọi thay thế **giá trị y hệt** (pixel-faithful) — token/class copy đúng giá trị.
@@ -961,6 +1187,80 @@ Hai lỗi thật phát hiện lúc test và đã sửa:
    - RUNTIME CONFIRMED: Sinh thành công 100% video `flow_hero_ref_4f5ef1-1.mp4` (1.632.208 bytes, 1280x720 4.01s H.264+AAC) từ tham chiếu `Hero.mp4`.
    - Snapshot: `docs/AI_RULES/HANDOFF_SNAPSHOTS/2026-09-14/HANDOFF_SNAPSHOT_008.md`.
 
+10. task-ui-theme-phase3 (2026-09-15):
+    - Thư viện `theme.js` hỗ trợ toggle Sáng/Tối với `localStorage` persistence.
+    - Chuyển `.logo-badge` và `.v2v-btn.primary` sang màu phẳng đặc (không gradient).
+    - Bộ test suite `tests/ui_theme.test.js` (7/7 PASS).
+    - Snapshot: `docs/AI_RULES/HANDOFF_SNAPSHOTS/2026-09-15/`.
+
+11. task-v2v-pipeline-and-pagination (2026-09-15):
+    - Đưa mục "Quy trình tự động hoá Video Studio (FSM Engine)" lên vị trí số 1 ngay đầu trang `/byteplus/video-to-video`.
+    - Thêm phân trang kho video (10, 20, 50, 100 clip/trang), dãy nút số trang thông minh, nút nhảy trang, tìm kiếm tức thì và lọc theo danh mục & trạng thái mô tả AI.
+    - 209/209 tests PASS (100%).
+
+12. task-flowq-options-and-visual-slots (2026-09-15):
+    - Bổ sung options: Image models (Nano Banana 2, Pro, 2 Lite), Video models (Omni 1.1 Flash, Veo 3.1 Lite/Fast/Quality/Lite Lower Priority), durations (4s, 6s, 8s, 10s), ratio đủ 5 tỉ lệ Flow, resolution (360p/720p riêng cho Omni Flash).
+    - Giao diện 2 ô trực quan riêng biệt cho Thành phần (Ingredients): Ô Ảnh tham chiếu (tối đa 3 ảnh, thumbnail preview, nút xóa từng ảnh) và Ô Video tham chiếu (tối đa 1 video, player preview, nút xóa).
+    - Tự động khóa/mở ô Video theo đúng model: Chỉ Omni 1.1 Flash mở video; các model Veo và Image mode tự động khóa ô video kèm badge cảnh báo đỏ chống lỗi người dùng.
+    - Chế độ Khung hình (Frames): 2 ô trực quan Khung đầu (bắt buộc) & Khung cuối (tùy chọn), chặn hoàn toàn video.
+
+13. task-v2v-project-flow-and-inputs-fix (2026-09-16):
+    - Tự động focus và chuyển Step 1 (v2v-input-panel) khi tạo dự án mới, không bị giữ step cũ.
+    - Bổ sung ô tìm kiếm dự án tức thì trong dropdown (`#v2v-project-select-search`).
+    - Cho phép đổi video đối thủ và video hook tự do trước khi phân tích AI ở bước 2.
+    - Sửa lỗi `POST /projects/:id/inputs` trên project trống, hỗ trợ fallback file detection và FSM transition an toàn.
+    - 254/254 tests PASS (100%).
+
+14. task-ui-light-theme-sync-and-flowq-db-isolation (2026-09-16):
+    - Sửa lỗi chế độ Sáng (Light mode) trên Flow Queue: nhúng `studio.css` vào `flow-queue.html`, viết bộ override `:root[data-theme="light"]` hoàn chỉnh cho `flow-queue.css` (header, card, input, jobs, frame slots, logs).
+    - Chuẩn hóa nền trắng (`#ffffff`) trên AI Studio Hub & Video Studio trong chế độ sáng: `#logs-container`, `#cost-breakdown-card`, `#active-task-badge`, media items trong queue table, `#v2v-hook-dropzone`, `#v2v-ref-dropzone`, `#v2v-project-select-trigger`, `#v2v-stepper`, `#v2v-final-review-panel`.
+    - Cô lập triệt để DB test Google Flow: Refactor `queue.js` hỗ trợ DI `{ flowRoot, store }`, tests dùng `tmpFlowRoot` tránh ghi đè DB thật. Dọn sạch 39 job test rác trong `flow_queue_db.json`, xác nhận 9 video gen thành công nguyên vẹn trên đĩa.
+    - 254/254 tests PASS (100%).
+
+15. task-v2v-final-review-gallery-player-fix (2026-09-16):
+    - Fix `.v2v-chip.strong` light mode để chữ "Phân cảnh / Scene" đọc được trên nền sáng.
+    - Cột phải `#v2v-final-review-card` về chiều cao tự nhiên giống cột trái, vẫn giữ `overflow-y: auto` và custom scrollbar.
+    - Giữ `.v2v-player` global `max-height: 480px`, không thu nhỏ video player chính trong `#v2v-final-active-box`.
+    - Chỉ thu nhỏ batch gallery: `.v2v-batch-gallery` `minmax(210px, 1fr)` và `.v2v-gallery-card .v2v-player` `max-height: 150px`.
+    - Bổ sung guard test để ngăn regression thu nhỏ nhầm player chính.
+    - 271/271 tests PASS (100%).
+
+16. task-v2v-modal-and-right-column-scroll (2026-09-16):
+    - `#v2v-asset-modal > .v2v-modal-content > .v2v-modal-body` là vùng scroll thật (`min-height: 0`, `overflow-y: auto`, custom scrollbar).
+    - `#v2v-modal-video` hiển thị đầy đủ bằng `object-fit: contain`, `max-height: min(56vh, 480px)`, player wrap không bị co.
+    - Cột phải `.v2v-workspace-right` cao bằng cột trái qua `align-items: stretch` + `height: 100%`; `#v2v-final-review-card` scroll nội dung bên trong.
+    - Bổ sung guard test cho modal scroll và cột phải stretch/scroll.
+    - 273/273 tests PASS (100%).
+
+17. task-css-sync-elevation-shadow (2026-09-16):
+    - Tokenize toàn bộ `public/studio/flow-queue.css`, sửa lỗi thiếu ngoặc đóng `@media (prefers-reduced-motion: reduce)`.
+    - Xóa Google Fonts khỏi `public/studio/index.html`, tuân thủ triệt để system font stack.
+    - Đồng bộ elevation shadow + viền phân cấp chuẩn cho `.card`, `.stat-card`, `.fq-card` trên cả Dark Mode và Light Mode.
+    - Snapshot: `docs/AI_RULES/HANDOFF_SNAPSHOTS/2026-09-16/HANDOFF_SNAPSHOT_002.md`.
+    - 273/273 tests PASS (100%).
+
+18. task-v2v-prompt-hook-ui-layout-and-vietnamese-workflow (2026-09-16):
+    - Cải tiến prompt sinh kịch bản (`timeline_generator.js`): Giữ trọn vẹn thời lượng video hook đầu vào, tự do hóa thời lượng tổng thể video output.
+    - Bổ sung chú thích 1-2 dòng mô tả công dụng dưới từng loại hook trong dropdown (`video-to-video.html`, `video-to-video.js`).
+    - Cấu hình layout Step 1-4 full-width (`.layout-single-column`, ẩn cột phải review), chỉ bung 2 cột ở Step 5-6.
+    - Click video trong Batch Gallery tự động nạp và phát trên Video Player chính.
+    - Nâng cấp `byteplus/multipart.js` hỗ trợ upload nhiều video và stream an toàn.
+    - Override light theme toàn diện cho tất cả các step.
+    - Sửa `byteplus/video_studio/assembler.js`: Không ép slow-motion làm dãn hình video; video chạy tốc độ 1.0x tự nhiên.
+    - 285/285 tests PASS (100%).
+
+19. task-v2v-step-scroll-stepper-and-library-vietnamese (2026-09-16):
+    - Step 2: Bọc bảng phân tích sự kiện `#v2v-hook-analysis-table` và `#v2v-ref-analysis-table` trong `.v2v-table-wrap` có scroll `max-height: 420px; overflow-y: auto;` với sticky `th`.
+    - Step 4: Thêm scroll cho `.v2v-batch-matrix-grid` (`max-height: 540px; overflow-y: auto;`), vừa vặn chiều cao 1 card biến thể.
+    - Stepper xem lại project hoàn thiện: Bấm quay lại Step 1-5 tự động thu về layout 1 cột full-width để hiển thị đúng nội dung step đó; chỉ bấm Step 6 mới bung 2 cột.
+    - AI mô tả lại toàn bộ 252 clip trong kho (`video_studio_library.json`) và toàn bộ 6 project (`video_studio_projects.json`) sang 100% Tiếng Việt tự nhiên bằng 9Router LLM (`ag/gemini-3.8-flash-high`).
+
+20. task-v2v-default-unselected-and-flowq-jobs-scroll (2026-09-16):
+    - Mặc định khi vào `http://localhost:20140/byteplus/video-to-video` ở trạng thái không chọn project nào (`selectValue: ""`), ẩn `#v2v-active-workspace`, hiện màn hình chờ `#v2v-no-project`, layout cột trái full-width. Có tùy chọn `-- Không chọn dự án nào (Màn hình chờ) --` trong dropdown.
+    - Flow Queue: Khung danh sách Jobs (`.fq-jobs`) tại `http://localhost:20140/byteplus/Flowqueue` giới hạn `max-height: 735px; overflow-y: auto; padding-right: 4px;`, hiển thị vừa vặn 2 card job, cuộn dọc êm ái.
+    - Snapshot: `docs/AI_RULES/HANDOFF_SNAPSHOTS/2026-09-16/HANDOFF_SNAPSHOT_003.md`.
+    - 286/286 tests PASS (100%).
+
 Backup: `server.js.pre-v2.bak` ở thư mục gốc (tạo trước khi có chính sách
 `BACKUP_ROOT`; các task sau dùng `docs/BACKUPS/`).
 
@@ -969,11 +1269,12 @@ Backup: `server.js.pre-v2.bak` ở thư mục gốc (tạo trước khi có chí
 # 11. VERIFICATION STATUS
 
 ```text
-Unit / Integration   194/194 PASS (npm test — 164 cũ + 9 Multi-Model + 13 Video to Video + 8 Google Flow Queue; 2026-09-14)
+Unit / Integration   298/298 PASS (npm test — 100% cả 4 Tiers: Tier 1: 86/86, Tier 2: 125/125, Tier 3: 59/59, Tier 4: 28/28; 2026-09-17)
 Runtime smoke        48/48 PASS   (E2E chính, concurrency, restart recovery)
 Settings API         200 OK       (mode="live", provider="kie", activeProviderName="KIE", referenceStorage="KIE upload", tos="not used", las="not used")
 Deeplove Routes      200 OK       (GET /deeplove, GET /Deeplove, GET /byteplus)
 Video Studio Route   200 OK       (GET /studio/video-to-video.html, GET /api/video-studio/*)
+Flow Queue Route     200 OK       (GET /byteplus/Flowqueue, GET /api/google-flow/*, Chrome CDP 9334 connected)
 Browser Render       PASS         (Headless Edge/Chrome 0 errors, verify_clean_library.png, verify_modal_detail.png)
 ```
 
@@ -997,10 +1298,14 @@ Kie.ai Seedance 2.5 Test Suite (incl. KIE-only)      30/30 PASS (Config, Upload,
 Kie.ai Pricing & Cost Estimation Suite (A-H)          8/8 PASS
 Kie.ai Usage Accounting & Balance Suite (A-F)         6/6 PASS
 Kie.ai Multi-Model Suite (2.5 / 2.0 Mini / 2.0 Fast) 9/9 PASS (Schema, Pricing, Validation, Model ID, UI Gating)
-Video to Video Library & Project Suite (SRS §3-§14)  13/13 PASS (Probe, Category, Scan, Store CRUD, FSM, Package Export, Timeline, Voice, Assemble)
-Edge TTS Voice Generation Verification               PASS (HoaiMy, NamMinh, Python edge-tts integration)
+Video to Video Library & Project Suite (SRS §3-§14)  14/14 PASS (Probe, Category, Scan, Store CRUD, FSM, Package Export, Timeline, Voice, Assemble, Inputs update)
+Edge TTS Voice Generation Verification               PASS (HoaiMy, NamMinh, English voices, Python edge-tts integration)
 Video Analyzer Pipeline Worker Verification          PASS (Whisper base transcription + Gemini Vision analysis via 9Router)
 Video to Video UI & Modal Visual Verification        PASS (Clean library without bulk button, detailed modal with HTTP 206 streaming)
+UI/UX Accessibility Pass (ui-ux-pro-max audit)       10/10 PASS (Focus visible rings, prefers-reduced-motion, decorative emoji aria-hidden)
+UI/UX Icon System — Phase 1a & 1b (Lucide SVG)       20/20 PASS (icons.js hydration, SVG icons, aria-label on icon-only buttons, dynamic data-icon)
+UI/UX Consistency — Phase 2 (inline-style to tokens) 9/9 PASS (Zero hardcoded colors in inline-style, utility classes)
+UI/UX Theme — Phase 3 (Light/Dark Runtime Theme)     7/7 PASS (studio.css light tokens, flat logo badge/buttons, theme.js persistence, toggle buttons)
 Deeplove Studio UI Verification (task-deeplove-kol)  PASS (KOL dropdown/modal, duration integer, media actions ▶️/⬇️)
 Live Test 1 (BytePlus Seedance 1.5 Pro)              PASS (cgt-20260907180456-wsttf, MP4 lưu tại byteplus_outputs/Tình/Hero/)
 Live Test 2 (OpenRouter Seedance 2.5)                API OK, TOS signed URL OK, bị ByteDance chặn do PrivacyInformation trên ảnh KOL ảo
@@ -1008,6 +1313,18 @@ Google Flow Real Gen (Chrome CDP 9334)               PASS (flow_mu12j1bm_25d01d,
 Google Flow Video Reference Gen (Hero.mp4)           PASS (flow_hero_ref_4f5ef1, 1.6MB MP4 1280x720 4.01s H.264+AAC, flow.google.com)
 Google Flow Full E2E Video Ref 1 (Hero.mp4)          PASS (flow_mu14d1yd_a2c26b, 1.88MB MP4 720x1280 4s 9:16, tự động 100%)
 Google Flow Full E2E Video Ref 2 (Cyberpunk Puppy)   PASS (flow_mu14wrtb_4183c8, 2.48MB MP4 720x1280 4s 9:16, tự động 100%)
+Video to Video 8 New Core Features Suite (Mục 1-8)     8/8 PASS (Prompt, Hook note, Single-column Step 1-4, Gallery-to-player, Tiếng Việt, Multipart, Light mode, Natural speed)
+Video to Video UX Refinements (Scroll, Stepper, Lang)  4/4 PASS (Step 2 scroll 420px, Step 4 scroll 540px, Stepper single-column recall, 100% Vietnamese re-description)
+Video to Video Full Vietnamese AI Descriptions         PASS (252 clips kho + 6 projects 100% Tiếng Việt)
+Flow Queue Jobs 2-Card Viewport & Custom Scroll        PASS (max-height: 735px, scrollbar tokenized, DOM verified 803px)
+Video to Video Default Unselected Standby State        PASS (selectValue: "", #v2v-no-project visible, layout-single-column)
+Footage-Driven Timeline & Voice Duration Constraint    12/12 PASS (Visual cluster, sequence selection, target/min/max words, assembler lock)
+Subtitle & Voiceover 1:1 Strict Dialogue Sync          PASS (100% sync, UPPERCASE caption, Edge TTS language detection)
+Assembler Subtitle Drawbox Cover                       PASS (drawbox đen mờ 92% che phủ sạch hoàn toàn phụ đề tiếng Anh cũ trong footage)
+Step 5 Overall Render Progress Bar (FFmpeg 10 luồng)   PASS (v2v-render-overall-card, pct, fill, dynamic polling update)
+9Router Combo "aa" Integration                         PASS (VISION_MODEL=aa, TEXT_MODEL=aa, NINE_ROUTER_TIMELINE_MODEL=aa, fallback 'aa')
+Batch Gallery & Main Player Concurrency Fix            PASS (playInMainPlayer pauses gallery videos, single player stream guaranteed)
+Live E2E Video Generation Test (5 videos rendered)     PASS (gtf_mu58pw3x_6ededb, final_1.mp4 to final_5.mp4, 100% Tiếng Việt)
 ```
 
 **V1 — regression đã kiểm:** `/higgsfield`, `/app.js`, `/styles.css`, `/api/queue`,
@@ -1054,6 +1371,22 @@ UI cũ render giống hệt trước. Không kích hoạt sinh video Higgsfield 
     - Hàng chờ tuần tự đảm bảo: nếu còn task phía sau, sau khi lượt trước tải xong hoàn tất sẽ đợi đúng 10 giây trước khi F5 làm mới trang để tiếp tục task kế tiếp.
     - Đã nghiệm thu chạy thật thành công job `flow_mu17jrb3_3dc779` (video 2.94MB, 4.01s, 720x1280), HTTP 200 OK.
     - Toàn bộ 207/207 tests PASS (100%) trên cả 4 Tiers.
+14. [ĐÃ ĐÓNG 2026-09-16] **Thời lượng video hook & kịch bản tự do**: Đã sửa prompt kịch bản (`timeline_generator.js`) bắt buộc giữ trọn vẹn thời lượng clip hook đầu vào, giải phóng giới hạn thời lượng video output tổng thể để tập trung vào logic hook và thân bài.
+15. [ĐÃ ĐÓNG 2026-09-16] **Tiếng Việt toàn diện Video Studio**: Toàn bộ 252 clip trong kho (`video_studio_library.json`) và 6 project (`video_studio_projects.json`) đã được AI 9Router mô tả và phân tích 100% bằng Tiếng Việt tự nhiên.
+16. [ĐÃ ĐÓNG 2026-09-16] **Trải nghiệm cuộn trang V2V & Flow Queue**: Step 2 (max-height: 420px) và Step 4 (max-height: 540px) có thanh scroll tinh gọn; Flow Queue giới hạn tối đa 2 card jobs (max-height: 735px) tránh vỡ layout trang.
+17. [ĐÃ ĐÓNG 2026-09-17] **Hiển thị Thumbnail Ảnh bìa Video Hook & Đối thủ trong Kho Thư viện**:
+    - Khắc phục lỗi video hook và video đối thủ (reference) không hiển thị ảnh bìa trong grid thư viện (`#v2v-library`).
+    - Căn nguyên: Bản ghi nạp từ `analyze-reference` và `analyze-hook` vào `video_studio_library.json` trước đây bị thiếu `asset_id` (`undefined`), khiến endpoint `/api/video-studio/library/thumb/undefined` trả về 404 và kích hoạt `v2v-thumb-fail`.
+    - Giải pháp backend: Bổ sung sinh `asset_id` an toàn (`VID_` + hex) trong `VideoStudioStore.upsertAsset`, vòng lặp tự vá lỗi trong constructor, gọi `ensureThumb()` ngay khi nạp video và preheat thumbnail qua `warmThumbs()`.
+    - Khôi phục dữ liệu: Gán ID và trích xuất ảnh thumbnail bằng ffmpeg cho toàn bộ 19 video hook/reference.
+    - Nghiệm thu: Xác thực trực tiếp qua Chrome CDP với 10/10 clip hook và 9/9 clip reference hiển thị ảnh bìa đầy đủ (`naturalWidth: 400`, `complete: true`), 286/286 tests PASS (100%).
+18. [ĐÃ ĐÓNG 2026-09-17] **Điều Phối Render Đa Luồng FFmpeg (Worker Pool), Cập Nhật Tiến Độ Real-time & Chống Treo Step 5**:
+    - Khắc phục hiện tượng Step 5 bị treo ở trạng thái `assembling` khi server khởi động lại hoặc ngắt kết nối HTTP.
+    - Tái cấu trúc bộ dựng batch: Thay thế việc bắn đồng thời 10 FFmpeg processes làm nghẽn CPU bằng mô hình Worker Pool điều phối 3 luồng luân phiên (`concurrency = 3`).
+    - Thêm endpoint `GET /projects/:id/render-progress` và cơ chế theo dõi tiến trình trực tiếp từng video (TTS ➡️ Ghép FFmpeg ➡️ Hoàn tất).
+    - Cập nhật UI Step 5: Thanh progress động và mô tả bước xử lý thực tế trên từng thẻ video; bổ sung nút `Dựng lại (Nếu bị gián đoạn)` trên Action Bar chống kẹt giao diện.
+    - Cơ chế tự phục hồi (Self-healing): Khi server boot, các project dở dang được tự động hồi phục về `script_approved` (hoặc `awaiting_final_review` nếu đã có `final.mp4`).
+    - Tốc độ vượt trội: Hoàn tất toàn bộ 10 video 1080p có phụ đề và giọng AI Edge TTS chỉ trong **98 giây** (1m38s). 286/286 tests PASS (100%).
 
 ---
 
@@ -1061,6 +1394,78 @@ UI cũ render giống hệt trước. Không kích hoạt sinh video Higgsfield 
 
 ```text
 1. ĐÃ HOÀN TẤT GẦN ĐÂY:
+   - task-v2v-step5-render-progress-and-concurrency-fix (2026-09-17):
+     + Thanh tiến độ tổng thể Step 5 (Overall Progress Bar): Thêm component `#v2v-render-overall-card` với fill bar, % tổng thể, đếm video và text trạng thái theo thời gian thực.
+     + Cấu hình 9Router combo `aa` qua .env: VISION_MODEL=aa, TEXT_MODEL=aa, NINE_ROUTER_TIMELINE_MODEL=aa và fallback trực tiếp trong timeline_generator.js.
+     + Thoại & phụ đề lấp đầy thời lượng phân cảnh: selectFootageSequence cung cấp đồng thời 3 mốc minWords / targetWords / maxWords; clip hook giữ trọn vẹn thời lượng thực tế; prompt yêu cầu lời bình lấp đầy phân cảnh.
+     + Sửa lỗi Double-Play Gallery & Player chính: playInMainPlayer tự động tạm dừng tất cả video trong gallery, chặn phát tại thumbnail và chuyển luồng phát độc quyền lên player chính.
+     + Kiểm thử TDD toàn diện: tests/footage_driven_timeline.test.js đạt 298/298 tests PASS (100% GREEN).
+   - task-v2v-footage-driven-timeline-and-voice-duration-constraint (2026-09-17):
+     + Footage-Driven / Asset-First Timeline Generation: Phân cụm kho clip thật thành 4 nhóm chức năng (clusterLibraryFootage), chọn chuỗi phân cảnh cụ thể trước khi viết lời bình (selectFootageSequence).
+     + Strict Voice Duration Constraint: Lời bình voiceover cho mỗi phân cảnh bắt buộc phải bằng hoặc ít hơn thời lượng của phân cảnh đó (word budget <= floor(T * 2.8)).
+     + Bộ kiểm soát đa tầng: Chỉ thị prompt LLM, hàm lọc tự động enforceVoiceDurationConstraint, và chuẩn hoá kịch bản biến thể applyCombinatorialPlanning.
+     + Đồng bộ 100% từng chữ giữa subtitle và voiceover; tự động chuyển ngữ theo Voice ID được chọn.
+     + Dải banner đen mờ 92% drawbox che phủ sạch 100% phụ đề tiếng Anh cũ trong footage gốc.
+     + Assembler: Cố định thời lượng phân cảnh theo clip gốc (origDur), không kéo dãn clip; tự động tăng tốc giọng đọc (atempo) và clamp (atrim=0:dur) nếu cần.
+     + Xác thực thực tế (Live E2E): Test trực tiếp từ Step 1 đến Step 5 với reference-video.mp4 và final_2.mp4, dựng thành công 5/5 video thành phẩm hoàn hảo.
+   - task-v2v-hook-ref-thumbnail-fix (2026-09-17):
+     + Sửa triệt để lỗi thiếu thumbnail ảnh bìa cho video hook và reference (đối thủ) trong thư viện (`#v2v-library`).
+     + Enforce `asset_id` hợp lệ trong `upsertAsset` & constructor self-healing của `VideoStudioStore`.
+     + Tự động kích hoạt `ensureThumb()` ngay khi phân tích hook/reference và `warmThumbs()` khi server khởi động.
+     + Sinh ảnh thumbnail thành công cho toàn bộ 19 video hook và reference.
+     + Xác thực CDP Chrome: 100% video hook và reference hiển thị ảnh bìa hoàn hảo, 286/286 tests PASS (100%).
+   - task-v2v-default-unselected-and-flowq-jobs-scroll (2026-09-16):
+     + Mặc định tải trang Video to Video ở màn hình chờ không chọn project (selectValue: "").
+     + Flow Queue giới hạn hiển thị vừa đủ 2 job card (max-height: 735px) kèm scrollbar tokenized.
+     + Snapshot: docs/AI_RULES/HANDOFF_SNAPSHOTS/2026-09-16/HANDOFF_SNAPSHOT_003.md.
+     + 286/286 tests PASS (100%).
+   - task-v2v-step-scroll-stepper-and-library-vietnamese (2026-09-16):
+     + Step 2 bọc bảng sự kiện trong container scroll 420px với header cố định.
+     + Step 4 bọc batch matrix grid trong container scroll 540px.
+     + Stepper xem lại project hoàn thiện: bấm Step 1-5 tự động thu về layout 1 cột full-width, bấm Step 6 bung 2 cột.
+     + Dùng 9Router LLM viết lại 100% mô tả tiếng Việt cho 252 clip kho và 6 project.
+   - task-v2v-prompt-hook-ui-layout-and-vietnamese-workflow (2026-09-16):
+     + Cải tiến prompt sinh kịch bản giữ đủ thời lượng hook, kịch bản tiếng Việt chuẩn marketing.
+     + Chú thích 1-2 dòng công dụng dưới từng tùy chọn loại hook trong dropdown.
+     + Layout Step 1-4 full-width (ẩn cột phải review), Step 5-6 bung 2 cột.
+     + Click video trong Batch Gallery tự động phát trên Video Player chính ở trên.
+     + Multipart parser upload nhiều video và stream an toàn.
+     + Light theme toàn diện cho tất cả các step và modal.
+     + Assembler chạy tốc độ tự nhiên 1.0x, không ép dãn slow-motion.
+     + 285/285 tests PASS (100%).
+   - task-css-sync-elevation-shadow (2026-09-16):
+     + Tokenize toàn bộ public/studio/flow-queue.css, fix bug media query, xóa Google Fonts khỏi index.html.
+     + Đồng bộ elevation shadow + viền phân cấp chuẩn cho .card, .stat-card, .fq-card trên cả Dark và Light theme.
+     + Snapshot: docs/AI_RULES/HANDOFF_SNAPSHOTS/2026-09-16/HANDOFF_SNAPSHOT_002.md.
+     + 273/273 tests PASS (100%).
+   - task-v2v-modal-and-right-column-scroll (2026-09-16):
+     + `#v2v-asset-modal > .v2v-modal-content > .v2v-modal-body` là vùng scroll thật (`min-height: 0`, `overflow-y: auto`, custom scrollbar).
+     + `#v2v-modal-video` hiển thị đầy đủ bằng `object-fit: contain`, `max-height: min(56vh, 480px)`, player wrap không bị co.
+     + Cột phải `.v2v-workspace-right` cao bằng cột trái qua `align-items: stretch` + `height: 100%`; `#v2v-final-review-card` scroll nội dung bên trong.
+     + Bổ sung guard test cho modal scroll và cột phải stretch/scroll.
+     + 273/273 tests PASS (100%).
+   - task-v2v-final-review-gallery-player-fix (2026-09-16):
+     + Fix `.v2v-chip.strong` light mode để chữ "Phân cảnh / Scene" đọc được trên nền sáng.
+     + Cột phải `#v2v-final-review-card` về chiều cao tự nhiên giống cột trái, vẫn giữ `overflow-y: auto` và custom scrollbar.
+     + Sửa đúng side question: `.v2v-player` global giữ `max-height: 480px`, không thu nhỏ video player chính trong `#v2v-final-active-box`.
+     + Chỉ thu nhỏ batch gallery: `.v2v-batch-gallery` `minmax(210px, 1fr)` và `.v2v-gallery-card .v2v-player` `max-height: 150px`.
+     + Bổ sung guard test để ngăn regression thu nhỏ nhầm player chính.
+     + 271/271 tests PASS (100%).
+   - task-ui-light-theme-sync-and-flowq-db-isolation (2026-09-16):
+     + Sửa lỗi chế độ Sáng (Light mode) trên Flow Queue: nhúng studio.css vào flow-queue.html, viết bộ override :root[data-theme="light"] hoàn chỉnh cho flow-queue.css (header, card, input, jobs, frame slots, logs).
+     + Chuẩn hóa nền trắng (#ffffff) trên AI Studio Hub & Video Studio trong chế độ sáng: #logs-container, #cost-breakdown-card, #active-task-badge, media items trong queue table (.ref-media-item, .ref-thumb-wrap), #v2v-hook-dropzone, #v2v-ref-dropzone, #v2v-project-select-trigger, #v2v-stepper, #v2v-final-review-panel.
+     + Cô lập triệt để DB test Google Flow: Refactor queue.js hỗ trợ DI { flowRoot, store }, tests dùng tmpFlowRoot tránh ghi đè DB thật. Dọn sạch 39 job test rác trong flow_queue_db.json, xác nhận 9 video gen thành công nguyên vẹn trên đĩa.
+     + 254/254 tests PASS (100%).
+   - task-v2v-project-flow-and-inputs-fix (2026-09-16):
+     + Tự động focus và chuyển Step 1 (v2v-input-panel) khi tạo dự án mới, không bị giữ step cũ.
+     + Bổ sung ô tìm kiếm dự án tức thì trong dropdown (#v2v-project-select-search).
+     + Cho phép đổi video đối thủ và video hook tự do trước khi phân tích AI ở bước 2.
+     + Sửa lỗi POST /projects/:id/inputs trên project trống, hỗ trợ fallback file detection và FSM transition an toàn.
+     + 254/254 tests PASS (100%).
+   - task-ui-theme-phase3 (2026-09-15):
+     + Thư viện theme.js hỗ trợ toggle Sáng/Tối với localStorage persistence.
+     + Chuyển .logo-badge và .v2v-btn.primary sang màu phẳng đặc (không gradient).
+     + Test suite tests/ui_theme.test.js.
    - task-flowq-batch-download-xpath-and-queue-delay (2026-09-14):
      + Nhận diện element video xong trên Batch 0 (<video aria-label="Video được tạo" src="https://flow-content.google/video/...">), đợi 3s rồi bấm nút download theo XPath batch info.
      + Cấu hình Browser/Page.setDownloadBehavior trên CDP, nhận diện file ZIP trực tiếp từ Chrome.

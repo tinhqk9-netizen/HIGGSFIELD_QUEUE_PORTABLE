@@ -5,10 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GTF Video AI Studio</title>
     <link rel="stylesheet" href="/studio/studio.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="/socket.io/socket.io.js"></script>
+    <script src="/studio/theme.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -48,6 +46,12 @@
                     <span class="status-dot gray" id="queue-dot"></span>
                     <span id="queue-status-text">Hàng Chờ: IDLE</span>
                 </div>
+
+                <!-- Theme toggle (Phase 3) -->
+                <button type="button" class="status-pill theme-toggle-btn" id="theme-toggle-btn" data-theme-toggle aria-label="Chuyển nền sáng/tối" style="cursor: pointer; font: inherit; color: inherit;">
+                    <span data-icon="moon" aria-hidden="true"></span>
+                    <span>Nền</span>
+                </button>
             </div>
         </header>
 
