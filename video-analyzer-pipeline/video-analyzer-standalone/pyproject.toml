@@ -1,0 +1,35 @@
+[project]
+name = "video-analyzer"
+version = "0.1.0"
+description = "Local multimodal video analysis pipeline with Whisper CUDA and Gemini 9Router"
+authors = [{ name = "OpenClaw Team" }]
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.4.0",
+    "torchvision>=0.19.0",
+    "openai-whisper>=20231117",
+    "openai>=1.40.0",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.2.0",
+    "tenacity>=8.3.0",
+    "Pillow>=10.0.0",
+    "orjson>=3.10.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["python"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["python"]
