@@ -2229,3 +2229,35 @@
 .v2v-lib-toolbar-left > * {
     max-width: 100%;
 }
+
+/* Card kịch bản biến thể bấm được để nạp lên bảng sửa (step 4) */
+.v2v-batch-card[data-variant-idx] {
+    cursor: pointer;
+    transition: border-color .12s ease, box-shadow .12s ease, transform .12s ease;
+}
+.v2v-batch-card[data-variant-idx]:hover {
+    border-color: var(--color-purple-light, #a78bfa);
+    transform: translateY(-1px);
+}
+/* Vòng focus RÕ cho người dùng bàn phím */
+.v2v-batch-card[data-variant-idx]:focus-visible {
+    outline: 2px solid var(--color-purple-light, #a78bfa);
+    outline-offset: 2px;
+}
+.v2v-batch-card.is-editing {
+    border-color: var(--color-purple-light, #a78bfa);
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, .28);
+}
+.v2v-batch-card.is-editing .v2v-batch-title::after {
+    content: ' · đang sửa';
+    font-size: .7rem;
+    font-weight: 500;
+    color: var(--color-purple-light, #a78bfa);
+}
+
+/* Nhãn "Đang sửa: Video #N" ở đầu bảng kịch bản */
+.v2v-timeline-variant {
+    font-size: .78rem;
+    color: var(--color-purple-light, #a78bfa);
+    white-space: nowrap;
+}

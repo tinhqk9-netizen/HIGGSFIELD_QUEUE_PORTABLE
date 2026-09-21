@@ -17,7 +17,7 @@ import path from 'path';
 
 import os from 'os';
 import { scriptGate } from '../byteplus/video_studio/job_queue.js';
-import { describeProgressView } from '../byteplus/video_studio/index.js';
+import { describeProgressView, resolveTimelineEditTarget } from '../byteplus/video_studio/index.js';
 import { resolveEffectiveSegmentDuration } from '../byteplus/video_studio/assembler.js';
 import {
     HOOK_TYPES,
@@ -56,6 +56,7 @@ const F = 'Đợt F — Xoá clip khỏi kho & tải lên nhóm Nguyên liệu';
 const G = 'Đợt G — Bộ đếm tiến trình mô tả AI không được vượt tổng';
 const H = 'Đợt H — Video output phải có ĐỦ mọi phân cảnh (cảnh 1-5s)';
 const I = 'Đợt I — Không nơi nào được tự sinh cửa sổ dài hơn clip';
+const J = 'Đợt J — Sửa được MỌI kịch bản biến thể ở step 4';
 
 const ANALYZER = 'video-analyzer-pipeline/video-analyzer-standalone';
 
@@ -1195,6 +1196,95 @@ export async function runPipelineAbcTests(reporter) {
     await reporter.test(I, 'Tier 2: prompt có ngân sách từ cho cảnh ngắn 1-2s', async () => {
         assert.ok(/Phân cảnh 1\.0s/.test(timelineGen),
             'luật mới cho cảnh ngắn tới 1s thì prompt phải nói viết bao nhiêu từ');
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ĐỢT J — SỬA ĐƯỢC MỌI KỊCH BẢN BIẾN THỂ (step 4)
+    //
+    // Yêu cầu user: bấm card kịch bản nào thì đẩy chi tiết kịch bản đó lên bảng sửa,
+    // thay vì chỉ sửa được kịch bản đầu tiên.
+    //
+    // Khi mở code ra thì thấy chuyện nặng hơn: bảng sửa ĐANG VÔ TÁC DỤNG.
+    // PUT /projects/:id/timeline chỉ ghi `productionTimeline`, còn /assemble lại dựng từ
+    // `batchTimelines` — hễ có biến thể là `productionTimeline` bị bỏ qua. Nghĩa là user
+    // sửa, bấm Lưu, rồi render vẫn ra kịch bản cũ. Sửa xong phải ghi vào ĐÚNG biến thể.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    const _prjBatch = {
+        id: 'P1',
+        batchTimelines: [
+            { index: 1, segments: [{ order: 1 }] },
+            { index: 2, segments: [{ order: 1 }] },
+            { index: 3, segments: [{ order: 1 }] }
+        ]
+    };
+
+    await reporter.test(J, 'Tier 1: chỉ đúng biến thể được chọn bị ghi', async () => {
+        const t = resolveTimelineEditTarget(_prjBatch, 2);
+        assert.strictEqual(t.scope, 'variant');
+        assert.strictEqual(t.index, 2, 'phải trỏ đúng biến thể #3 (index 2)');
+        assert.strictEqual(t.total, 3);
+    });
+
+    await reporter.test(J, 'Tier 1: biến thể đầu vẫn sửa được như cũ', async () => {
+        const t = resolveTimelineEditTarget(_prjBatch, 0);
+        assert.strictEqual(t.scope, 'variant');
+        assert.strictEqual(t.index, 0);
+    });
+
+    await reporter.test(J, 'Tier 1: client cũ KHÔNG gửi index ⇒ về biến thể đầu, KHÔNG rơi vào productionTimeline', async () => {
+        for (const bad of [undefined, null, '', NaN, -1, 99, 1.5, 'x', {}]) {
+            const t = resolveTimelineEditTarget(_prjBatch, bad);
+            assert.strictEqual(t.scope, 'variant',
+                `index ${String(bad)} phải vẫn ghi vào biến thể, nếu rơi về productionTimeline là mất dữ liệu lúc dựng`);
+            assert.strictEqual(t.index, 0, 'index không dùng được thì lấy biến thể đầu — đúng cái bảng đang hiện');
+        }
+    });
+
+    await reporter.test(J, 'Tier 1: project KHÔNG có biến thể ⇒ giữ đường cũ', async () => {
+        for (const prj of [{ id: 'P2' }, { id: 'P3', batchTimelines: [] }, { id: 'P4', batchTimelines: null }]) {
+            const t = resolveTimelineEditTarget(prj, 0);
+            assert.strictEqual(t.scope, 'single', 'chưa có biến thể thì vẫn lưu vào productionTimeline');
+            assert.strictEqual(t.total, 0);
+        }
+    });
+
+    await reporter.test(J, 'Tier 1: input rác không làm vỡ', async () => {
+        for (const prj of [null, undefined, 'x', 42]) {
+            const t = resolveTimelineEditTarget(prj, 0);
+            assert.strictEqual(t.scope, 'single');
+        }
+    });
+
+    await reporter.test(J, 'Tier 2: route PUT timeline phải ghi vào batchTimelines', async () => {
+        assert.ok(/resolveTimelineEditTarget/.test(studioIndex),
+            'route phải đi qua hàm chọn đích, đừng ghi thẳng productionTimeline');
+        assert.ok(/batchTimelines:/.test(studioIndex),
+            'phải cập nhật batchTimelines — /assemble dựng từ mảng này');
+    });
+
+    await reporter.test(J, 'Tier 3: card kịch bản phải bấm được và có chỉ số biến thể', async () => {
+        assert.ok(/data-variant-idx/.test(v2vJs),
+            'mỗi card cần mang chỉ số biến thể để biết bấm vào cái nào');
+        assert.ok(/is-editing/.test(v2vJs),
+            'phải đánh dấu card đang được sửa, không thì user không biết mình đang sửa kịch bản nào');
+    });
+
+    await reporter.test(J, 'Tier 3: bàn phím cũng dùng được (không chỉ chuột)', async () => {
+        assert.ok(/role="button"/.test(v2vJs), 'card bấm được thì phải khai báo role');
+        assert.ok(/'Enter'|"Enter"/.test(v2vJs), 'phải xử lý Enter/Space cho người dùng bàn phím');
+    });
+
+    await reporter.test(J, 'Tier 3: bảng sửa nạp từ biến thể đang chọn', async () => {
+        assert.ok(/activeVariantIndex/.test(v2vJs),
+            'cần state ghi nhớ biến thể đang sửa');
+        assert.ok(/variantIndex/.test(v2vJs),
+            'lúc lưu phải gửi variantIndex lên server');
+    });
+
+    await reporter.test(J, 'Tier 3: có chỗ hiện đang sửa biến thể nào', async () => {
+        assert.ok(/v2v-timeline-variant/.test(v2vHtml),
+            'đầu bảng sửa phải nói rõ đang sửa Video #N');
     });
 }
 

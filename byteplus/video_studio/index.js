@@ -172,6 +172,30 @@ export function canTransition(current, target) {
  * kẹp im lặng là che lỗi, còn cờ thì vẫn thấy được mà truy.
  * ─────────────────────────────────────────────────────────────────────────
  */
+/**
+ * ─────────────────────────────────────────────────────────────────────────
+ * CHỌN ĐÍCH KHI LƯU BẢNG SỬA KỊCH BẢN (step 4).
+ *
+ * Lỗi phát hiện khi làm tính năng này: bảng sửa ĐANG VÔ TÁC DỤNG.
+ * `PUT /projects/:id/timeline` chỉ ghi `productionTimeline`, còn `/assemble` lại dựng
+ * từ `batchTimelines` — hễ project có biến thể là `productionTimeline` bị bỏ qua hoàn
+ * toàn. Nghĩa là user sửa clip/lời thoại, bấm Lưu, rồi render vẫn ra kịch bản cũ.
+ *
+ * Luật:
+ *  - Có biến thể → luôn ghi vào MỘT biến thể cụ thể (mặc định biến thể đầu nếu client
+ *    không gửi `variantIndex`, vì đó đúng là kịch bản bảng sửa đang hiện).
+ *  - Chưa có biến thể → giữ đường cũ, ghi `productionTimeline`.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+export function resolveTimelineEditTarget(project, variantIndex) {
+    const batches = (project && Array.isArray(project.batchTimelines)) ? project.batchTimelines : [];
+    if (batches.length === 0) return { scope: 'single', index: -1, total: 0 };
+
+    const n = Number(variantIndex);
+    const usable = Number.isInteger(n) && n >= 0 && n < batches.length;
+    return { scope: 'variant', index: usable ? n : 0, total: batches.length };
+}
+
 export function describeProgressView(stats) {
     const src = stats || {};
     const total = Math.max(0, Math.floor(Number(src.total)) || 0);
@@ -1392,9 +1416,22 @@ export function createVideoStudioRouter({ store, libraryDir } = {}) {
             if (!Array.isArray(timeline)) {
                 return res.status(400).json({ error: 'Timeline phải là một mảng các segment.', code: 'INVALID_TIMELINE' });
             }
-            s.updateProject(p.id, { productionTimeline: timeline });
+
+            // Ghi vào ĐÚNG biến thể user đang sửa. Bản cũ chỉ ghi productionTimeline trong khi
+            // /assemble dựng từ batchTimelines ⇒ mọi chỉnh sửa bị bỏ lúc render.
+            const target = resolveTimelineEditTarget(p, req.body && req.body.variantIndex);
+            if (target.scope === 'variant') {
+                const batchTimelines = p.batchTimelines.map((t, i) => (
+                    i === target.index ? { ...t, segments: timeline } : t
+                ));
+                // productionTimeline giữ bản vừa sửa để đường dựng đơn (không có biến thể) khớp theo.
+                s.updateProject(p.id, { batchTimelines, productionTimeline: timeline });
+            } else {
+                s.updateProject(p.id, { productionTimeline: timeline });
+            }
+
             exportProjectPackage(s.getProject(p.id), s);
-            res.json({ success: true, project: s.getProject(p.id) });
+            res.json({ success: true, project: s.getProject(p.id), edited: target });
         } catch (err) { fail(res, err); }
     });
 

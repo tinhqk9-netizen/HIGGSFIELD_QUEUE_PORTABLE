@@ -8,6 +8,9 @@
     let loadedAssets = [];
     let loadedProjects = [];
     let activeProject = null;
+    // Kịch bản biến thể đang được nạp lên bảng sửa ở step 4. Bấm card nào -> đổi số này.
+    let activeVariantIndex = 0;
+    let _variantProjectId = null;
     let currentLibraryPage = 1;
     let libraryPageSize = 10;
     let librarySearchQuery = '';
@@ -2246,7 +2249,35 @@
         const summaryEl = $('v2v-timeline-summary');
         if (!panel || !tbody) return;
 
-        const tl = p.productionTimeline;
+        // Đổi project thì quay về biến thể đầu, đừng giữ chỉ số của project trước.
+        if (p.id !== _variantProjectId) {
+            _variantProjectId = p.id;
+            activeVariantIndex = 0;
+        }
+
+        const batches = Array.isArray(p.batchTimelines) ? p.batchTimelines : [];
+        if (batches.length > 0 && (activeVariantIndex < 0 || activeVariantIndex >= batches.length)) {
+            activeVariantIndex = 0;
+        }
+
+        const variantEl = $('v2v-timeline-variant');
+        if (variantEl) {
+            if (batches.length > 0) {
+                const cur = batches[activeVariantIndex] || {};
+                const vNum = cur.index || (activeVariantIndex + 1);
+                const ang = (cur.angle && typeof cur.angle === 'object')
+                    ? (cur.angle.name || cur.angle.title || cur.angle.id || '')
+                    : (cur.angle || '');
+                variantEl.textContent = `Đang sửa: Video #${vNum}${ang ? ' — ' + ang : ''} (${batches.length} biến thể)`;
+            } else {
+                variantEl.textContent = '';
+            }
+        }
+
+        // Có biến thể thì bảng sửa LUÔN là biến thể đang chọn; chưa có thì dùng đường cũ.
+        const tl = batches.length > 0
+            ? ((batches[activeVariantIndex] && batches[activeVariantIndex].segments) || [])
+            : p.productionTimeline;
         if (!tl || !Array.isArray(tl) || !tl.length) {
             // Nếu chưa có timeline nhưng đã phân tích đối thủ, ẩn panel
             panel.hidden = true;
@@ -2403,6 +2434,13 @@
             return;
         }
 
+        // Đổi project / số biến thể ít hơn chỉ số đang giữ -> đưa về biến thể đầu NGAY Ở ĐÂY.
+        // renderBatchMatrix chạy TRƯỚC renderTimelinePanel, nếu chỉ kẹp ở panel thì lượt render
+        // này không card nào được đánh dấu "đang sửa".
+        if (p.id !== _variantProjectId || activeVariantIndex < 0 || activeVariantIndex >= batches.length) {
+            activeVariantIndex = 0;
+        }
+
         panel.dataset.hasData = '1';
         const validCount = batches.filter(b => b.isValid !== false).length;
         const totalCount = batches.length;
@@ -2438,8 +2476,13 @@
             const segs = tl.segments || [];
             const dur = segs.reduce((s, seg) => s + Math.max(0, (Number(seg.sourceOut) || 0) - (Number(seg.sourceIn) || 0)), 0);
 
+            const editing = (idx === activeVariantIndex);
+
             return `
-            <div class="v2v-batch-card ${isValid ? '' : 'invalid'}">
+            <div class="v2v-batch-card ${isValid ? '' : 'invalid'}${editing ? ' is-editing' : ''}"
+                 data-variant-idx="${idx}" role="button" tabindex="0"
+                 aria-pressed="${editing ? 'true' : 'false'}"
+                 title="Bấm để nạp kịch bản này lên bảng sửa phía trên">
                 <div class="v2v-batch-card-header">
                     <div>
                         <span class="v2v-batch-title">Video #${vNum}</span>
@@ -2483,6 +2526,36 @@
             </div>
             `;
         }).join('');
+
+        // Bấm (hoặc Enter/Space) vào card -> nạp kịch bản đó lên bảng sửa.
+        // Gắn một lần trên grid, không gắn từng card, để render lại không nhân listener.
+        if (!grid.dataset.pickBound) {
+            grid.dataset.pickBound = '1';
+
+            const pick = (el) => {
+                const idx = Number(el && el.dataset ? el.dataset.variantIdx : NaN);
+                if (!Number.isInteger(idx)) return;
+                activeVariantIndex = idx;
+                if (activeProject) {
+                    renderTimelinePanel(activeProject);
+                    renderBatchMatrix(activeProject);   // cập nhật dấu card đang sửa
+                }
+                const panel = $('v2v-timeline-panel');
+                if (panel && !panel.hidden) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            };
+
+            grid.addEventListener('click', (e) => {
+                const card = e.target.closest('.v2v-batch-card[data-variant-idx]');
+                if (card) pick(card);
+            });
+            grid.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                const card = e.target.closest('.v2v-batch-card[data-variant-idx]');
+                if (!card) return;
+                e.preventDefault();   // Space không được cuộn trang
+                pick(card);
+            });
+        }
     }
 
     let _renderProgressTimer = null;
@@ -3048,15 +3121,20 @@
         $('v2v-save-timeline-btn').addEventListener('click', async () => {
             if (!activeProject) return;
             const timeline = collectTimelineFromTable();
+            const hasBatch = Array.isArray(activeProject.batchTimelines) && activeProject.batchTimelines.length > 0;
             try {
                 const res = await api(`/projects/${encodeURIComponent(activeProject.id)}/timeline`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ timeline })
+                    // variantIndex: server ghi vào ĐÚNG biến thể này. Thiếu nó thì bản sửa
+                    // rơi vào productionTimeline và bị bỏ lúc dựng.
+                    body: JSON.stringify({ timeline, variantIndex: activeVariantIndex })
                 });
                 activeProject = res.project;
-                showAlert('✓ Đã lưu kịch bản thành công!', 'success');
+                const vNum = hasBatch ? ((activeProject.batchTimelines[activeVariantIndex] || {}).index || (activeVariantIndex + 1)) : null;
+                showAlert(vNum ? `✓ Đã lưu kịch bản Video #${vNum}!` : '✓ Đã lưu kịch bản thành công!', 'success');
                 renderTimelinePanel(activeProject);
+                renderBatchMatrix(activeProject);   // card phải cập nhật số phân đoạn/thời lượng mới
             } catch (e) {
                 showAlert('Lỗi lưu kịch bản: ' + e.message, 'error');
             }

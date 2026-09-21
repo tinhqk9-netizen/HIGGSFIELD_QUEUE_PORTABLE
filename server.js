@@ -239,6 +239,7 @@ app.get([
     '/byteplus'
 ], (req, res) => res.sendFile(path.join(__dirname, 'public', 'studio', 'index.html')));
 app.get('/guide', (req, res) => res.sendFile(path.join(__dirname, 'public', 'guide.html')));
+app.get(['/huong-dan', '/huong-dan-nhan-vien'], (req, res) => res.sendFile(path.join(__dirname, 'public', 'huong-dan-nhan-vien.html')));
 // Trang tool "Video to Video" — path riêng, cùng cổng, dùng chung theme studio.
 app.get(['/byteplus/video-to-video', '/studio/video-to-video', '/video-to-video'],
     (req, res) => res.sendFile(path.join(__dirname, 'public', 'studio', 'video-to-video.html')));

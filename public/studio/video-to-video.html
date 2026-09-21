@@ -41,6 +41,12 @@
                     <span id="v2v-queue-badge-text">Hàng đợi: —</span>
                 </button>
 
+                <!-- Hướng dẫn sử dụng cho nhân viên -->
+                <a href="/huong-dan-nhan-vien.html" target="_blank" class="status-pill" title="Mở sổ tay hướng dẫn dành cho nhân viên" style="cursor: pointer; text-decoration: none; font: inherit; color: inherit;">
+                    <span aria-hidden="true">📖</span>
+                    <span>Hướng dẫn</span>
+                </a>
+
                 <!-- Theme toggle (Phase 3) -->
                 <button type="button" class="status-pill theme-toggle-btn" id="theme-toggle-btn" data-theme-toggle aria-label="Chuyển nền sáng/tối" style="cursor: pointer; font: inherit; color: inherit;">
                     <span data-icon="moon" aria-hidden="true"></span>
@@ -323,6 +329,9 @@
                     <div class="v2v-subpanel" id="v2v-timeline-panel" hidden>
                         <div class="v2v-subpanel-head">
                             <h4><span data-icon="file-text" aria-hidden="true"></span> Kịch bản dựng phim — Production Timeline (SRS §7)</h4>
+                            <!-- Cho biết bảng dưới đang là kịch bản NÀO: trước đây chỉ sửa được
+                                 kịch bản đầu nên không cần, giờ bấm card nào nạp card đó. -->
+                            <span class="v2v-timeline-variant" id="v2v-timeline-variant" aria-live="polite"></span>
                             <div class="v2v-subpanel-actions">
                                 <span class="v2v-timeline-summary" id="v2v-timeline-summary"></span>
                                 <div class="v2v-voice-picker">
@@ -345,7 +354,7 @@
                                 <button class="v2v-btn sm primary" id="v2v-save-timeline-btn"><span data-icon="save" aria-hidden="true"></span> Lưu kịch bản</button>
                             </div>
                         </div>
-                        <p class="v2v-hint">Bạn có thể chỉnh sửa trực tiếp clip nguồn, thời điểm cắt (giây), text overlay, và lời thoại thuyết minh AI trước khi duyệt dựng video (SRS §8).</p>
+                        <p class="v2v-hint">Bấm vào một card ở <strong>Ma Trận Kịch Bản Biến Thể</strong> bên dưới để nạp kịch bản đó lên bảng này. Bạn có thể chỉnh sửa trực tiếp clip nguồn, thời điểm cắt (giây), text overlay, và lời thoại thuyết minh AI trước khi duyệt dựng video (SRS §8).</p>
                         <div class="v2v-table-wrap">
                             <table class="v2v-table" id="v2v-timeline-table">
                                 <thead>
